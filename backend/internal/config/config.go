@@ -26,6 +26,11 @@ type Config struct {
 
 	BotTopK     int
 	BotMinScore float64
+
+	RegisterMode   string
+	RegisterInvite string
+	AppEnv         string
+	TokenUSDPerM   float64
 }
 
 // Load reads configuration from environment with sensible local defaults.
@@ -50,6 +55,11 @@ func Load() Config {
 
 		BotTopK:     getEnvInt("BOT_TOP_K", 5),
 		BotMinScore: getEnvFloat("BOT_MIN_SCORE", 0.3),
+
+		RegisterMode:   getEnv("REGISTER_MODE", "first-only"),
+		RegisterInvite: getEnv("REGISTER_INVITE", ""),
+		AppEnv:         getEnv("APP_ENV", "development"),
+		TokenUSDPerM:   getEnvFloat("TOKEN_USD_PER_MILLION", 1.10),
 	}
 }
 
@@ -105,6 +115,21 @@ func applyDotEnvLLMKeys() {
 			_ = os.Setenv(key, val)
 		}
 	}
+}
+
+// WeakJWTSecret reports whether JWT_SECRET is empty or the documented default.
+func WeakJWTSecret(secret string) bool {
+	s := strings.TrimSpace(secret)
+	return s == "" || s == "change-me-please"
+}
+
+// IsProduction is true for APP_ENV=production or GIN_MODE=release.
+func IsProduction(appEnv string) bool {
+	env := strings.ToLower(strings.TrimSpace(appEnv))
+	if env == "production" || env == "prod" {
+		return true
+	}
+	return strings.EqualFold(os.Getenv("GIN_MODE"), "release")
 }
 
 func getEnv(key, fallback string) string {

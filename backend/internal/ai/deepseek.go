@@ -31,7 +31,7 @@ func NewOpenAIChat(apiKey, baseURL, model string) *OpenAIChat {
 		baseURL: baseURL,
 		model:   model,
 		httpClient: &http.Client{
-			Timeout: 90 * time.Second,
+			Timeout: 60 * time.Second,
 		},
 	}
 }
@@ -84,12 +84,20 @@ func (c *OpenAIChat) ChatStream(ctx context.Context, req ChatRequest, onToken fu
 		maxTok = 500
 	}
 
+	msgs := make([]chatMessage, 0, 2+len(req.History))
+	msgs = append(msgs, chatMessage{Role: "system", Content: req.System})
+	for _, h := range req.History {
+		role := h.Role
+		if role != "user" && role != "assistant" {
+			continue
+		}
+		msgs = append(msgs, chatMessage{Role: role, Content: h.Content})
+	}
+	msgs = append(msgs, chatMessage{Role: "user", Content: req.User})
+
 	body, err := json.Marshal(chatCompletionRequest{
-		Model: c.model,
-		Messages: []chatMessage{
-			{Role: "system", Content: req.System},
-			{Role: "user", Content: req.User},
-		},
+		Model:         c.model,
+		Messages:      msgs,
 		Temperature:   req.Temperature,
 		MaxTokens:     maxTok,
 		Stream:        true,

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/supernand/docubot/backend/internal/middleware"
@@ -15,11 +17,15 @@ import (
 	"github.com/supernand/docubot/backend/internal/util"
 )
 
-const maxUploadBytes = 5 << 20 // 5 MiB
+const (
+	maxUploadBytes = 5 << 20 // 5 MiB
+	ingestTimeout  = 3 * time.Minute
+)
 
 // DocumentHandler serves /documents/* admin endpoints.
 type DocumentHandler struct {
-	docs *service.DocumentService
+	docs       *service.DocumentService
+	processing sync.Map // documentID -> struct{}
 }
 
 // NewDocumentHandler constructs a DocumentHandler.
@@ -145,13 +151,18 @@ func (h *DocumentHandler) Reprocess(c *gin.Context) {
 }
 
 func (h *DocumentHandler) startProcess(documentID int64) {
+	if _, loaded := h.processing.LoadOrStore(documentID, struct{}{}); loaded {
+		return
+	}
 	go func() {
+		defer h.processing.Delete(documentID)
 		defer func() {
 			if rec := recover(); rec != nil {
 				log.Printf("document process panic id=%d: %v", documentID, rec)
 			}
 		}()
-		ctx := context.WithoutCancel(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), ingestTimeout)
+		defer cancel()
 		if err := h.docs.Process(ctx, documentID); err != nil {
 			log.Printf("document process id=%d: %v", documentID, err)
 		}
@@ -177,6 +188,8 @@ func (h *DocumentHandler) mapError(c *gin.Context, err error) {
 		util.BadRequest(c, msg)
 	case errors.Is(err, service.ErrNotFound):
 		util.Error(c, http.StatusNotFound, "NOT_FOUND", "document not found")
+	case errors.Is(err, service.ErrBusy):
+		util.Error(c, http.StatusConflict, "BUSY", "dokumen sedang diproses")
 	default:
 		util.Error(c, http.StatusInternalServerError, "INTERNAL", "internal server error")
 	}

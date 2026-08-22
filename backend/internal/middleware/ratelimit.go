@@ -19,6 +19,7 @@ type RateLimiter struct {
 	max    int
 	window time.Duration
 	now    func() time.Time
+	ops    int
 }
 
 // NewRateLimiter constructs a limiter (max hits per window).
@@ -54,14 +55,36 @@ func (l *RateLimiter) Allow(key string) bool {
 	}
 	if len(kept) >= l.max {
 		l.hits[key] = kept
+		l.maybeGC(cutoff)
 		return false
 	}
 	l.hits[key] = append(kept, now)
+	l.maybeGC(cutoff)
 	return true
 }
 
-// ChatRateLimit returns middleware that limits POST /chat to 10 requests/minute/IP.
-func ChatRateLimit(l *RateLimiter) gin.HandlerFunc {
+func (l *RateLimiter) maybeGC(cutoff time.Time) {
+	l.ops++
+	if l.ops < 64 {
+		return
+	}
+	l.ops = 0
+	for k, ts := range l.hits {
+		alive := false
+		for _, t := range ts {
+			if t.After(cutoff) {
+				alive = true
+				break
+			}
+		}
+		if !alive {
+			delete(l.hits, k)
+		}
+	}
+}
+
+// IPRateLimit limits requests per client IP.
+func IPRateLimit(l *RateLimiter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
 		if ip == "" {
@@ -73,4 +96,9 @@ func ChatRateLimit(l *RateLimiter) gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+// ChatRateLimit returns middleware that limits POST /chat to 10 requests/minute/IP.
+func ChatRateLimit(l *RateLimiter) gin.HandlerFunc {
+	return IPRateLimit(l)
 }

@@ -26,6 +26,7 @@ type registerRequest struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	Invite   string `json:"invite"`
 }
 
 type loginRequest struct {
@@ -41,7 +42,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	user, err := h.auth.Register(c.Request.Context(), req.Name, req.Email, req.Password)
+	user, err := h.auth.RegisterWithInvite(c.Request.Context(), req.Name, req.Email, req.Password, req.Invite)
 	if err != nil {
 		h.mapAuthError(c, err)
 		return
@@ -51,6 +52,16 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		"email": user.Email,
 		"name":  user.Name,
 	})
+}
+
+// RegisterStatus handles GET /api/v1/auth/register-status.
+func (h *AuthHandler) RegisterStatus(c *gin.Context) {
+	open, mode, err := h.auth.RegisterStatus(c.Request.Context())
+	if err != nil {
+		util.Error(c, http.StatusInternalServerError, "INTERNAL", "internal server error")
+		return
+	}
+	util.JSON(c, http.StatusOK, gin.H{"open": open, "mode": mode})
 }
 
 // Login handles POST /api/v1/auth/login.
@@ -106,6 +117,8 @@ func (h *AuthHandler) mapAuthError(c *gin.Context, err error) {
 		util.BadRequest(c, msg)
 	case errors.Is(err, repository.ErrEmailTaken):
 		util.Error(c, http.StatusConflict, "EMAIL_TAKEN", "email already registered")
+	case errors.Is(err, service.ErrRegisterClosed):
+		util.Error(c, http.StatusForbidden, "REGISTER_CLOSED", "pendaftaran ditutup; akun admin sudah ada")
 	case errors.Is(err, service.ErrInvalidCredentials):
 		util.Error(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "invalid email or password")
 	case errors.Is(err, service.ErrUnauthorized):

@@ -1,16 +1,26 @@
-import { type FormEvent, type ReactNode, useState } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { type FormEvent, type ReactNode, useEffect, useState } from 'react'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { authApi } from '../api/admin'
+import { authPublicApi } from '../api/chat'
 import { getToken, HttpError, setToken } from '../api/client'
 import { Button } from '../components/ui/Button'
 import { Input, Label } from '../components/ui/Input'
 
 export function LoginPage() {
   const nav = useNavigate()
+  const [params] = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState(params.get('reason') === 'expired' ? 'Sesi berakhir. Silakan login lagi.' : '')
   const [busy, setBusy] = useState(false)
+  const [registerOpen, setRegisterOpen] = useState(false)
+
+  useEffect(() => {
+    authPublicApi
+      .registerStatus()
+      .then((s) => setRegisterOpen(s.open))
+      .catch(() => setRegisterOpen(false))
+  }, [])
 
   if (getToken()) {
     return <Navigate to="/admin/documents" replace />
@@ -47,23 +57,35 @@ export function LoginPage() {
           {busy ? 'Masuk...' : 'Masuk'}
         </Button>
       </form>
-      <p className="mt-4 text-center text-sm text-muted">
-        Belum punya akun?{' '}
-        <Link to="/register" className="text-brand hover:underline">
-          Daftar
-        </Link>
-      </p>
+      {registerOpen && (
+        <p className="mt-4 text-center text-sm text-muted">
+          Belum punya akun?{' '}
+          <Link to="/register" className="text-brand hover:underline">
+            Daftar
+          </Link>
+        </p>
+      )}
     </AuthShell>
   )
 }
 
 export function RegisterPage() {
   const nav = useNavigate()
+  const [params] = useSearchParams()
+  const invite = params.get('invite') || ''
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [open, setOpen] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    authPublicApi
+      .registerStatus()
+      .then((s) => setOpen(s.open || Boolean(invite)))
+      .catch(() => setOpen(Boolean(invite)))
+  }, [invite])
 
   if (getToken()) {
     return <Navigate to="/admin/documents" replace />
@@ -74,7 +96,7 @@ export function RegisterPage() {
     setError('')
     setBusy(true)
     try {
-      await authApi.register(name, email, password)
+      await authApi.register(name, email, password, invite || undefined)
       const res = await authApi.login(email, password)
       setToken(res.token)
       nav('/admin/documents', { replace: true })
@@ -85,32 +107,51 @@ export function RegisterPage() {
     }
   }
 
-  return (
-    <AuthShell title="Daftar admin" subtitle="Satu akun untuk satu bot knowledge base.">
-      <form className="space-y-4" onSubmit={onSubmit}>
-        <div>
-          <Label>Nama</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} required />
-        </div>
-        <div>
-          <Label>Email</Label>
-          <Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        </div>
-        <div>
-          <Label>Password (min. 8 karakter)</Label>
-          <Input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />
-        </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <Button type="submit" className="w-full" disabled={busy}>
-          {busy ? 'Mendaftar...' : 'Daftar'}
-        </Button>
-      </form>
-      <p className="mt-4 text-center text-sm text-muted">
-        Sudah punya akun?{' '}
-        <Link to="/login" className="text-brand hover:underline">
-          Masuk
+  if (open === false) {
+    return (
+      <AuthShell title="Pendaftaran ditutup" subtitle="Akun admin sudah ada. Demo live tidak menerima daftar publik.">
+        <p className="text-sm text-muted">
+          Masuk dengan akun yang sudah terdaftar, atau minta tautan undangan dari pemilik bot.
+        </p>
+        <Link to="/login" className="mt-4 inline-block text-sm text-brand hover:underline">
+          Ke halaman masuk
         </Link>
-      </p>
+      </AuthShell>
+    )
+  }
+
+  return (
+    <AuthShell title="Daftar admin" subtitle="Satu akun pertama menjadi owner bot publik. Pendaftaran ditutup setelah itu.">
+      {open === null ? (
+        <p className="text-sm text-muted">Memuat...</p>
+      ) : (
+        <>
+          <form className="space-y-4" onSubmit={onSubmit}>
+            <div>
+              <Label>Nama</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} required />
+            </div>
+            <div>
+              <Label>Email</Label>
+              <Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            </div>
+            <div>
+              <Label>Password (min. 8 karakter)</Label>
+              <Input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />
+            </div>
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <Button type="submit" className="w-full" disabled={busy}>
+              {busy ? 'Mendaftar...' : 'Daftar'}
+            </Button>
+          </form>
+          <p className="mt-4 text-center text-sm text-muted">
+            Sudah punya akun?{' '}
+            <Link to="/login" className="text-brand hover:underline">
+              Masuk
+            </Link>
+          </p>
+        </>
+      )}
     </AuthShell>
   )
 }

@@ -24,8 +24,8 @@ func NewChatHandler(chat *service.ChatService) *ChatHandler {
 }
 
 type chatRequest struct {
-	ConversationID *int64 `json:"conversation_id"`
-	Message        string `json:"message"`
+	ConversationID *string `json:"conversation_id"`
+	Message        string  `json:"message"`
 }
 
 // Chat handles POST /api/v1/chat (SSE).
@@ -103,7 +103,7 @@ func (e *sseEmitter) Token(content string) error {
 	return e.write("token", gin.H{"content": content})
 }
 
-func (e *sseEmitter) Done(conversationID, messageID int64, totalTokens int, latencyMS int64) error {
+func (e *sseEmitter) Done(conversationID string, messageID int64, totalTokens int, latencyMS int64) error {
 	return e.write("done", gin.H{
 		"conversation_id": conversationID,
 		"message_id":      messageID,

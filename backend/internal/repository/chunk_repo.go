@@ -18,6 +18,8 @@ type EmbeddedChunk struct {
 	Content    string
 	TokenCount int
 	Embedding  []float32
+	EmbedModel string
+	EmbedDim   int
 }
 
 // ChunkRepository persists document chunks and embeddings.
@@ -51,7 +53,8 @@ func (r *ChunkRepo) ReplaceForDocument(ctx context.Context, documentID int64, ch
 	}
 
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT INTO chunks (document_id, position, content, token_count, embedding) VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO chunks (document_id, position, content, token_count, embedding, embed_model, embed_dim)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 	)
 	if err != nil {
 		return fmt.Errorf("prepare insert: %w", err)
@@ -63,7 +66,7 @@ func (r *ChunkRepo) ReplaceForDocument(ctx context.Context, documentID int64, ch
 		if err != nil {
 			return fmt.Errorf("marshal embedding: %w", err)
 		}
-		if _, err := stmt.ExecContext(ctx, documentID, c.Position, c.Content, c.TokenCount, string(embJSON)); err != nil {
+		if _, err := stmt.ExecContext(ctx, documentID, c.Position, c.Content, c.TokenCount, string(embJSON), c.EmbedModel, c.EmbedDim); err != nil {
 			return fmt.Errorf("insert chunk: %w", err)
 		}
 	}
@@ -106,7 +109,8 @@ func (r *ChunkRepo) ListByDocument(ctx context.Context, documentID int64) ([]mod
 // ListReadyWithEmbeddingsForUser returns all chunks of ready documents for a user.
 func (r *ChunkRepo) ListReadyWithEmbeddingsForUser(ctx context.Context, userID int64) ([]EmbeddedChunk, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT c.id, c.document_id, d.filename, c.position, c.content, c.token_count, c.embedding
+		SELECT c.id, c.document_id, d.filename, c.position, c.content, c.token_count, c.embedding,
+		       COALESCE(c.embed_model, ''), COALESCE(c.embed_dim, 0)
 		FROM chunks c
 		INNER JOIN documents d ON d.id = c.document_id
 		WHERE d.user_id = ? AND d.status = ?
@@ -122,11 +126,14 @@ func (r *ChunkRepo) ListReadyWithEmbeddingsForUser(ctx context.Context, userID i
 	for rows.Next() {
 		var c EmbeddedChunk
 		var embJSON string
-		if err := rows.Scan(&c.ID, &c.DocumentID, &c.Filename, &c.Position, &c.Content, &c.TokenCount, &embJSON); err != nil {
+		if err := rows.Scan(&c.ID, &c.DocumentID, &c.Filename, &c.Position, &c.Content, &c.TokenCount, &embJSON, &c.EmbedModel, &c.EmbedDim); err != nil {
 			return nil, fmt.Errorf("scan embedded chunk: %w", err)
 		}
 		if err := json.Unmarshal([]byte(embJSON), &c.Embedding); err != nil {
 			return nil, fmt.Errorf("unmarshal embedding for chunk %d: %w", c.ID, err)
+		}
+		if c.EmbedDim == 0 {
+			c.EmbedDim = len(c.Embedding)
 		}
 		out = append(out, c)
 	}

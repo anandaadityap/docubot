@@ -2,10 +2,10 @@ import { api } from './client'
 import type { Conversation, ChatMessage, Document, Overview, Settings, TopQuestion, User } from './types'
 
 export const authApi = {
-  register: (name: string, email: string, password: string) =>
+  register: (name: string, email: string, password: string, invite?: string) =>
     api<User>('/api/v1/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ name, email, password, invite: invite || undefined }),
     }),
   login: (email: string, password: string) =>
     api<{ token: string; user: User }>('/api/v1/auth/login', {

@@ -35,7 +35,7 @@ func newTestDocService(t *testing.T, embedder ai.Embedder) (*service.DocumentSer
 		embedder,
 		uploadDir,
 	)
-	auth := service.NewAuthService(repository.NewUserRepo(db), "test-secret")
+	auth := service.NewAuthServiceWithPolicy(repository.NewUserRepo(db), "test-secret", "open", "")
 	return docs, auth, uploadDir
 }
 

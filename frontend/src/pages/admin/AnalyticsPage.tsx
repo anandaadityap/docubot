@@ -3,7 +3,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { analyticsApi } from '../../api/admin'
 import { HttpError } from '../../api/client'
 import type { Overview, TopQuestion } from '../../api/types'
-import { formatDay } from '../../lib/format'
+import { formatDay, formatUSD } from '../../lib/format'
 
 export function AnalyticsPage() {
   const [ov, setOv] = useState<Overview | null>(null)
@@ -24,12 +24,16 @@ export function AnalyticsPage() {
   return (
     <div>
       <h1 className="text-xl font-semibold text-ink">Analitik</h1>
-      <p className="mb-6 text-sm text-muted">Volume chat 14 hari terakhir, latensi, dan pertanyaan teratas.</p>
+      <p className="mb-6 text-sm text-muted">
+        Volume chat 14 hari terakhir, latensi, token, dan estimasi biaya (tarif default DeepSeek output).
+      </p>
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Stat label="Total percakapan" value={ov?.total_conversations ?? '—'} />
         <Stat label="Total pesan" value={ov?.total_messages ?? '—'} />
         <Stat label="Rata-rata latensi" value={ov ? `${ov.avg_latency_ms} ms` : '—'} />
+        <Stat label="Total token" value={ov?.total_tokens ?? '—'} />
+        <Stat label="Est. biaya LLM" value={ov ? formatUSD(ov.estimated_usd) : '—'} />
       </div>
       <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4">
         <h2 className="mb-4 text-sm font-semibold text-ink">Chat per hari</h2>

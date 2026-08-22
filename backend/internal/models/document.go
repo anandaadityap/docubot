@@ -20,6 +20,8 @@ type Document struct {
 	Status     string    `json:"status"`
 	ErrorMsg   string    `json:"error_msg,omitempty"`
 	ChunkCount int       `json:"chunk_count"`
+	EmbedModel string    `json:"embed_model,omitempty"`
+	EmbedDim   int       `json:"embed_dim,omitempty"`
 	CreatedAt  time.Time `json:"created_at,omitempty"`
 	UpdatedAt  time.Time `json:"updated_at,omitempty"`
 }

@@ -9,6 +9,7 @@ import (
 // ChatRequest is an LLM completion request (non-RAG fields only).
 type ChatRequest struct {
 	System      string
+	History     []ChatTurn
 	User        string
 	Temperature float64
 	MaxTokens   int
@@ -75,6 +76,9 @@ func (s *StubLLM) ChatStream(ctx context.Context, req ChatRequest, onToken func(
 	}
 
 	promptEst := EstimateTokens(req.System) + EstimateTokens(req.User)
+	for _, h := range req.History {
+		promptEst += EstimateTokens(h.Content)
+	}
 	compEst := EstimateTokens(built.String())
 	return TokenUsage{
 		PromptTokens:     promptEst,

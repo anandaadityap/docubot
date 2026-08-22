@@ -19,14 +19,14 @@ type capturingEmitter struct {
 	sources  []models.Source
 	tokens   strings.Builder
 	inactive string
-	doneID   int64
+	doneID   string
 	msgID    int64
 }
 
 func (e *capturingEmitter) Sources(s []models.Source) error { e.sources = s; return nil }
 func (e *capturingEmitter) Token(c string) error            { e.tokens.WriteString(c); return nil }
 func (e *capturingEmitter) Inactive(m string) error         { e.inactive = m; return nil }
-func (e *capturingEmitter) Done(cid, mid int64, _ int, _ int64) error {
+func (e *capturingEmitter) Done(cid string, mid int64, _ int, _ int64) error {
 	e.doneID = cid
 	e.msgID = mid
 	return nil
@@ -53,6 +53,7 @@ func newChatStack(t *testing.T, llm ai.LLMProvider) (*service.ChatService, *serv
 	docs := service.NewDocumentService(repository.NewDocumentRepo(db), repository.NewChunkRepo(db), embedder, uploadDir)
 	chat := service.NewChatService(
 		users,
+		repository.NewDocumentRepo(db),
 		repository.NewChunkRepo(db),
 		repository.NewConversationRepo(db),
 		repository.NewMessageRepo(db),
@@ -60,7 +61,7 @@ func newChatStack(t *testing.T, llm ai.LLMProvider) (*service.ChatService, *serv
 		embedder,
 		llm,
 	)
-	settings := service.NewSettingsService(users, repository.NewSettingsRepo(db))
+	settings := service.NewSettingsService(users, repository.NewSettingsRepo(db), repository.NewDocumentRepo(db))
 	return chat, docs, settings, u.ID
 }
 
@@ -112,7 +113,7 @@ func TestChat_BotInactive(t *testing.T) {
 	if em.tokens.Len() > 0 {
 		t.Fatal("should not stream LLM tokens when inactive")
 	}
-	if em.doneID == 0 {
+	if em.doneID == "" {
 		t.Fatal("expected done conversation id")
 	}
 }
@@ -129,8 +130,8 @@ func TestChat_NoContext_DoesNotHallucinate(t *testing.T) {
 		t.Fatalf("expected no sources, got %+v", em.sources)
 	}
 	got := strings.ToLower(em.tokens.String())
-	if !strings.Contains(got, "tidak") {
-		t.Fatalf("expected honest unknown, got %q", em.tokens.String())
+	if !strings.Contains(got, "tidak") && !strings.Contains(got, "belum") {
+		t.Fatalf("expected honest unknown / empty kb, got %q", em.tokens.String())
 	}
 }
 
@@ -153,5 +154,66 @@ func TestChat_RelevantSources(t *testing.T) {
 	}
 	if em.msgID == 0 {
 		t.Fatal("expected saved bot message id")
+	}
+}
+
+type recordingLLM struct {
+	last ai.ChatRequest
+	ai.StubLLM
+}
+
+func (r *recordingLLM) ChatStream(ctx context.Context, req ai.ChatRequest, onToken func(string) error) (ai.TokenUsage, error) {
+	r.last = req
+	return r.StubLLM.ChatStream(ctx, req, onToken)
+}
+
+func TestChat_FollowUpSendsHistory(t *testing.T) {
+	rec := &recordingLLM{StubLLM: ai.StubLLM{Reply: "Harga paket Starter Rp 99.000. [1]"}}
+	chat, docs, _, userID := newChatStack(t, rec)
+	uploadReady(t, docs, userID)
+
+	em1 := &capturingEmitter{}
+	if err := chat.Chat(context.Background(), service.ChatInput{Message: "Ada paket apa saja?"}, em1); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	if em1.doneID == "" {
+		t.Fatal("expected conversation public id")
+	}
+
+	em2 := &capturingEmitter{}
+	cid := em1.doneID
+	if err := chat.Chat(context.Background(), service.ChatInput{Message: "itu berapa harganya?", ConversationID: &cid}, em2); err != nil {
+		t.Fatalf("follow-up: %v", err)
+	}
+	if len(rec.last.History) < 2 {
+		t.Fatalf("expected prior turns in history, got %d: %+v", len(rec.last.History), rec.last.History)
+	}
+}
+
+func TestChat_ZeroHit_DoesNotCallLLM(t *testing.T) {
+	rec := &recordingLLM{StubLLM: ai.StubLLM{Reply: "should not run"}}
+	chat, docs, settings, userID := newChatStack(t, rec)
+	uploadReady(t, docs, userID)
+	cfg, err := settings.Get(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("settings: %v", err)
+	}
+	if _, err := settings.Update(context.Background(), userID, service.UpdateInput{
+		BotName: cfg.BotName, WelcomeMessage: cfg.WelcomeMessage, BotActive: true,
+		Temperature: cfg.Temperature, MaxTokens: cfg.MaxTokens, TopK: cfg.TopK, MinScore: 0.99,
+	}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	em := &capturingEmitter{}
+	if err := chat.Chat(context.Background(), service.ChatInput{Message: "xyzzy-unrelated-foobar-999"}, em); err != nil {
+		t.Fatalf("chat: %v", err)
+	}
+	if rec.last.User != "" {
+		t.Fatalf("LLM should not be called on 0-hit, got user=%q", rec.last.User)
+	}
+	got := strings.ToLower(em.tokens.String())
+	if !strings.Contains(got, "tidak") {
+		t.Fatalf("expected local unknown, got %q", em.tokens.String())
 	}
 }

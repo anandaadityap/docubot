@@ -8,4 +8,6 @@ type Chunk struct {
 	Content    string    `json:"content"`
 	TokenCount int       `json:"token_count"`
 	Embedding  []float32 `json:"-"`
+	EmbedModel string    `json:"embed_model,omitempty"`
+	EmbedDim   int       `json:"embed_dim,omitempty"`
 }

@@ -138,6 +138,19 @@ func (e *OpenAIEmbedder) embedBatch(ctx context.Context, texts []string) ([][]fl
 	return out, nil
 }
 
+func (e *OpenAIEmbedder) Model() string { return e.model }
+
+func (e *OpenAIEmbedder) VectorDims() int {
+	switch e.model {
+	case "text-embedding-3-small", "text-embedding-ada-002":
+		return 1536
+	case "text-embedding-3-large":
+		return 3072
+	default:
+		return 0
+	}
+}
+
 func truncateStr(s string, n int) string {
 	if len(s) <= n {
 		return s

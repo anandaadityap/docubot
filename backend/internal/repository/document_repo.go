@@ -16,9 +16,10 @@ type DocumentRepository interface {
 	GetByIDForUser(ctx context.Context, id, userID int64) (*models.Document, error)
 	ListByUser(ctx context.Context, userID int64) ([]models.Document, error)
 	UpdateStatus(ctx context.Context, id int64, status string) error
-	SetReady(ctx context.Context, id int64, chunkCount int) error
+	SetReady(ctx context.Context, id int64, chunkCount int, embedModel string, embedDim int) error
 	SetFailed(ctx context.Context, id int64, errMsg string) error
 	DeleteForUser(ctx context.Context, id, userID int64) error
+	CountReadyForUser(ctx context.Context, userID int64) (int, error)
 }
 
 // DocumentRepo is the SQLite implementation of DocumentRepository.
@@ -52,7 +53,7 @@ func (r *DocumentRepo) Create(ctx context.Context, userID int64, filename, fileT
 func (r *DocumentRepo) GetByID(ctx context.Context, id int64) (*models.Document, error) {
 	row := r.db.QueryRowContext(ctx,
 		`SELECT id, user_id, filename, file_type, size_bytes, status, COALESCE(error_msg, ''),
-		        chunk_count, created_at, updated_at
+		        chunk_count, COALESCE(embed_model, ''), COALESCE(embed_dim, 0), created_at, updated_at
 		 FROM documents WHERE id = ?`,
 		id,
 	)
@@ -63,7 +64,7 @@ func (r *DocumentRepo) GetByID(ctx context.Context, id int64) (*models.Document,
 func (r *DocumentRepo) GetByIDForUser(ctx context.Context, id, userID int64) (*models.Document, error) {
 	row := r.db.QueryRowContext(ctx,
 		`SELECT id, user_id, filename, file_type, size_bytes, status, COALESCE(error_msg, ''),
-		        chunk_count, created_at, updated_at
+		        chunk_count, COALESCE(embed_model, ''), COALESCE(embed_dim, 0), created_at, updated_at
 		 FROM documents WHERE id = ? AND user_id = ?`,
 		id, userID,
 	)
@@ -74,7 +75,7 @@ func (r *DocumentRepo) GetByIDForUser(ctx context.Context, id, userID int64) (*m
 func (r *DocumentRepo) ListByUser(ctx context.Context, userID int64) ([]models.Document, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, user_id, filename, file_type, size_bytes, status, COALESCE(error_msg, ''),
-		        chunk_count, created_at, updated_at
+		        chunk_count, COALESCE(embed_model, ''), COALESCE(embed_dim, 0), created_at, updated_at
 		 FROM documents WHERE user_id = ? ORDER BY id DESC`,
 		userID,
 	)
@@ -119,11 +120,11 @@ func (r *DocumentRepo) UpdateStatus(ctx context.Context, id int64, status string
 	return nil
 }
 
-// SetReady marks a document ready with chunk_count.
-func (r *DocumentRepo) SetReady(ctx context.Context, id int64, chunkCount int) error {
+// SetReady marks a document ready with chunk_count and the embedder used.
+func (r *DocumentRepo) SetReady(ctx context.Context, id int64, chunkCount int, embedModel string, embedDim int) error {
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE documents SET status = ?, chunk_count = ?, error_msg = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		models.DocumentStatusReady, chunkCount, id,
+		`UPDATE documents SET status = ?, chunk_count = ?, embed_model = ?, embed_dim = ?, error_msg = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		models.DocumentStatusReady, chunkCount, embedModel, embedDim, id,
 	)
 	if err != nil {
 		return fmt.Errorf("set ready: %w", err)
@@ -176,12 +177,24 @@ func (r *DocumentRepo) DeleteForUser(ctx context.Context, id, userID int64) erro
 	return nil
 }
 
+// CountReadyForUser returns how many documents are ready for retrieval.
+func (r *DocumentRepo) CountReadyForUser(ctx context.Context, userID int64) (int, error) {
+	var n int
+	if err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM documents WHERE user_id = ? AND status = ?`,
+		userID, models.DocumentStatusReady,
+	).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count ready documents: %w", err)
+	}
+	return n, nil
+}
+
 func scanDocument(row *sql.Row) (*models.Document, error) {
 	var d models.Document
 	var createdAt, updatedAt string
 	err := row.Scan(
 		&d.ID, &d.UserID, &d.Filename, &d.FileType, &d.SizeBytes, &d.Status, &d.ErrorMsg,
-		&d.ChunkCount, &createdAt, &updatedAt,
+		&d.ChunkCount, &d.EmbedModel, &d.EmbedDim, &createdAt, &updatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -203,7 +216,7 @@ func scanDocumentRow(row scannable) (*models.Document, error) {
 	var createdAt, updatedAt string
 	err := row.Scan(
 		&d.ID, &d.UserID, &d.Filename, &d.FileType, &d.SizeBytes, &d.Status, &d.ErrorMsg,
-		&d.ChunkCount, &createdAt, &updatedAt,
+		&d.ChunkCount, &d.EmbedModel, &d.EmbedDim, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scan document: %w", err)

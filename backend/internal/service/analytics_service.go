@@ -2,20 +2,32 @@ package service
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/supernand/docubot/backend/internal/repository"
 )
 
+// Default blended USD per million tokens (conservative DeepSeek-chat output list price).
+const defaultUSDPerMillionTokens = 1.10
+
 // AnalyticsService computes dashboard metrics.
 type AnalyticsService struct {
-	repo repository.AnalyticsRepository
-	now  func() time.Time
+	repo          repository.AnalyticsRepository
+	now           func() time.Time
+	usdPerMillion float64
 }
 
 // NewAnalyticsService constructs an AnalyticsService.
 func NewAnalyticsService(repo repository.AnalyticsRepository) *AnalyticsService {
-	return &AnalyticsService{repo: repo, now: time.Now}
+	return &AnalyticsService{repo: repo, now: time.Now, usdPerMillion: defaultUSDPerMillionTokens}
+}
+
+// SetUSDPerMillion overrides the cost estimate rate.
+func (s *AnalyticsService) SetUSDPerMillion(v float64) {
+	if v > 0 {
+		s.usdPerMillion = v
+	}
 }
 
 // Overview is GET /analytics/overview payload.
@@ -24,6 +36,8 @@ type Overview struct {
 	TotalMessages      int         `json:"total_messages"`
 	TotalBotMessages   int         `json:"total_bot_messages"`
 	AvgLatencyMS       int         `json:"avg_latency_ms"`
+	TotalTokens        int         `json:"total_tokens"`
+	EstimatedUSD       float64     `json:"estimated_usd"`
 	Daily              []DailyStat `json:"daily"`
 }
 
@@ -45,7 +59,7 @@ func (s *AnalyticsService) OverviewLast14Days(ctx context.Context, userID int64)
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	since := today.AddDate(0, 0, -13)
 
-	totalConv, totalMsg, totalBot, avgLatency, daily, err := s.repo.Overview(ctx, userID, since)
+	totalConv, totalMsg, totalBot, avgLatency, totalTokens, daily, err := s.repo.Overview(ctx, userID, since)
 	if err != nil {
 		return nil, err
 	}
@@ -60,11 +74,16 @@ func (s *AnalyticsService) OverviewLast14Days(ctx context.Context, userID int64)
 		filled = append(filled, DailyStat{Date: day, Chats: byDate[day]})
 	}
 
+	est := (float64(totalTokens) / 1_000_000.0) * s.usdPerMillion
+	est = math.Round(est*1_000_000) / 1_000_000
+
 	return &Overview{
 		TotalConversations: totalConv,
 		TotalMessages:      totalMsg,
 		TotalBotMessages:   totalBot,
 		AvgLatencyMS:       int(avgLatency + 0.5),
+		TotalTokens:        totalTokens,
+		EstimatedUSD:       est,
 		Daily:              filled,
 	}, nil
 }

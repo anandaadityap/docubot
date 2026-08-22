@@ -13,17 +13,33 @@ import (
 
 // SettingsService loads and updates bot settings.
 type SettingsService struct {
-	users    repository.UserRepository
-	settings repository.SettingsRepository
+	users          repository.UserRepository
+	settings       repository.SettingsRepository
+	docs           repository.DocumentRepository
+	registerStatus func(context.Context) (open bool, mode string, err error)
 }
 
 // NewSettingsService constructs a SettingsService.
-func NewSettingsService(users repository.UserRepository, settings repository.SettingsRepository) *SettingsService {
-	return &SettingsService{users: users, settings: settings}
+func NewSettingsService(users repository.UserRepository, settings repository.SettingsRepository, docs repository.DocumentRepository) *SettingsService {
+	return &SettingsService{users: users, settings: settings, docs: docs}
+}
+
+// SetRegisterStatus wires public register_open from AuthService.
+func (s *SettingsService) SetRegisterStatus(fn func(context.Context) (bool, string, error)) {
+	s.registerStatus = fn
 }
 
 // GetPublic returns the owner bot profile for the public chat page.
 func (s *SettingsService) GetPublic(ctx context.Context) (*models.PublicBot, error) {
+	registerOpen := false
+	if s.registerStatus != nil {
+		open, _, err := s.registerStatus(ctx)
+		if err != nil {
+			return nil, err
+		}
+		registerOpen = open
+	}
+
 	owner, err := s.users.First(ctx)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -32,6 +48,8 @@ func (s *SettingsService) GetPublic(ctx context.Context) (*models.PublicBot, err
 				WelcomeMessage: "Halo! Ada yang bisa saya bantu?",
 				BotActive:      false,
 				Configured:     false,
+				HasReadyKB:     false,
+				RegisterOpen:   registerOpen,
 			}, nil
 		}
 		return nil, err
@@ -40,11 +58,20 @@ func (s *SettingsService) GetPublic(ctx context.Context) (*models.PublicBot, err
 	if err != nil {
 		return nil, err
 	}
+	ready := 0
+	if s.docs != nil {
+		ready, err = s.docs.CountReadyForUser(ctx, owner.ID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &models.PublicBot{
 		BotName:        cfg.BotName,
 		WelcomeMessage: cfg.WelcomeMessage,
 		BotActive:      cfg.BotActive,
 		Configured:     true,
+		HasReadyKB:     ready > 0,
+		RegisterOpen:   registerOpen,
 	}, nil
 }
 

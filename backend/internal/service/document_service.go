@@ -23,6 +23,8 @@ const (
 var (
 	// ErrNotFound is returned when a document is missing or not owned by the user.
 	ErrNotFound = errors.New("not found")
+	// ErrBusy is returned when ingest is already running for the document.
+	ErrBusy = errors.New("document is already processing")
 )
 
 // DocumentService handles upload, ingest pipeline, list, delete, and reprocess.
@@ -120,6 +122,10 @@ func (s *DocumentService) processDoc(ctx context.Context, doc *models.Document) 
 		texts[i] = c.Content
 	}
 
+	if err := ctx.Err(); err != nil {
+		return fail("ingest timeout")
+	}
+
 	vectors, err := s.embedder.Embed(ctx, texts)
 	if err != nil {
 		return fail(fmt.Sprintf("embed: %v", err))
@@ -136,13 +142,15 @@ func (s *DocumentService) processDoc(ctx context.Context, doc *models.Document) 
 			Content:    tc.Content,
 			TokenCount: tc.TokenCount,
 			Embedding:  vectors[i],
+			EmbedModel: s.embedder.Model(),
+			EmbedDim:   len(vectors[i]),
 		}
 	}
 
 	if err := s.chunks.ReplaceForDocument(ctx, doc.ID, chunks); err != nil {
 		return fail(fmt.Sprintf("save chunks: %v", err))
 	}
-	if err := s.docs.SetReady(ctx, doc.ID, len(chunks)); err != nil {
+	if err := s.docs.SetReady(ctx, doc.ID, len(chunks), s.embedder.Model(), len(vectors[0])); err != nil {
 		return fail(fmt.Sprintf("set ready: %v", err))
 	}
 	return nil
@@ -218,6 +226,9 @@ func (s *DocumentService) Reprocess(ctx context.Context, userID, documentID int6
 			return nil, ErrNotFound
 		}
 		return nil, err
+	}
+	if doc.Status == models.DocumentStatusProcessing {
+		return nil, ErrBusy
 	}
 	if err := s.chunks.DeleteByDocument(ctx, documentID); err != nil {
 		return nil, err

@@ -16,6 +16,7 @@ type UserRepository interface {
 	GetByEmail(ctx context.Context, email string) (*models.User, error)
 	GetByID(ctx context.Context, id int64) (*models.User, error)
 	First(ctx context.Context) (*models.User, error)
+	Count(ctx context.Context) (int, error)
 }
 
 // UserRepo is the SQLite implementation of UserRepository.
@@ -87,6 +88,15 @@ func (r *UserRepo) First(ctx context.Context) (*models.User, error) {
 		`SELECT id, email, password_hash, name, created_at FROM users ORDER BY id ASC LIMIT 1`,
 	)
 	return scanUser(row)
+}
+
+// Count returns the number of admin users.
+func (r *UserRepo) Count(ctx context.Context) (int, error) {
+	var n int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count users: %w", err)
+	}
+	return n, nil
 }
 
 func scanUser(row *sql.Row) (*models.User, error) {

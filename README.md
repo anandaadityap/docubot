@@ -19,9 +19,9 @@ docker compose up --build
 # Health:   http://127.0.0.1:3000/healthz
 ```
 
-1. Open `/register`, create the admin account (the **first** account owns the public bot).
-2. Upload `backend/testdata/manual-pengguna.md` on **Dokumen**.
-3. Wait until status is `ready`, then chat on `/`.
+1. Open `/register` and create the **first** admin account (later sign-ups are closed; that first account owns the public bot).
+2. On **Dokumen**, upload a `.md`/`.txt` file — or download the sample FAQ from the empty state (no need to dig in the repo).
+3. Wait until status is `ready`, then chat on `/`. Follow-up questions stay in the same tab (refresh keeps the session; **Chat baru** starts over).
 
 ### Local development (without Docker)
 
@@ -65,6 +65,8 @@ go test -o tmp/htest.exe ./internal/handler
 
 ## Auth API
 
+Register is **first-user-only** by default (`REGISTER_MODE=first-only`). After the first admin exists, `POST /auth/register` returns 403 unless you set `REGISTER_MODE=open` or pass `REGISTER_INVITE`. Check `GET /api/v1/auth/register-status`.
+
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/auth/register \
   -H "Content-Type: application/json" \
@@ -74,6 +76,8 @@ curl -s -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"nanda@example.com","password":"secret123"}'
 ```
+
+Login/register are rate-limited (5 requests/minute/IP). Chat is 10/minute/IP.
 
 ## Documents API
 
@@ -93,16 +97,16 @@ curl -N -X POST http://localhost:8080/api/v1/chat \
   -d '{"message":"Gimana cara reset password?"}'
 ```
 
-Events: `sources` → `token`* → `done` (or `inactive` / `error`). Rate limit: 10 requests/minute/IP.
+Events: `sources` → `token`* → `done` (or `inactive` / `error`). `conversation_id` in `done` is an opaque UUID (send it back on the next turn). Rate limit: 10 requests/minute/IP. LLM/SSE timeout is 60s.
 
-Public bot profile (no JWT): `GET /api/v1/bot`.
+Public bot profile (no JWT): `GET /api/v1/bot` (includes `has_ready_kb` and `register_open`).
 
 ## Admin API
 
 - `GET/PUT /api/v1/settings`
 - `GET /api/v1/conversations?page=1&limit=20`
 - `GET /api/v1/conversations/:id`
-- `GET /api/v1/analytics/overview`
+- `GET /api/v1/analytics/overview` (includes `total_tokens` and `estimated_usd`)
 - `GET /api/v1/analytics/top-questions?limit=10`
 
 ## Benchmark
@@ -117,16 +121,16 @@ BASE_URL=http://127.0.0.1:8080 ./scripts/bench.sh
 .\scripts\bench.ps1 -BaseUrl http://127.0.0.1:8080
 ```
 
-The script prints wall time, server `latency_ms`, token usage, and an estimated USD cost using DeepSeek-chat list prices (override `OUT_PER_M` / `-OutPerMillion`). Record a real run in this README after deploy.
+The script prints wall time, **time-to-first-token** (`ttft_ms`), server `latency_ms`, token usage, and an estimated USD cost using DeepSeek-chat list prices (override `OUT_PER_M` / `-OutPerMillion`). Record a real DeepSeek run in this README after deploy.
 
-**Sample local run (StubLLM, 22 Agu 2026):** wall time and cost depend on your machine; with real DeepSeek keys, target time-to-first-token &lt; 2s.
+**Sample local run (StubLLM, 22 Agu 2026, Windows):** `total_wall_ms` is typically well under 1s because StubLLM does not call a network. With real DeepSeek + OpenAI embeddings, target **TTFT &lt; 2s** (NFR-01) after a document is `ready`.
 
 ## Deploy (VPS)
 
-1. `docker compose up -d --build`
-2. DNS A record `chatbot.supernand.tech` → VPS IP
-3. Host nginx reverse-proxy to `127.0.0.1:3000` + Certbot SSL
-4. Set `JWT_SECRET`, `LLM_API_KEY`, `EMBED_API_KEY`, and `CORS_ORIGINS` in `.env`
+1. Set `.env`: strong `JWT_SECRET`, `APP_ENV=production`, `LLM_API_KEY`, `EMBED_API_KEY`, `CORS_ORIGINS`. Production **refuses** to start with `JWT_SECRET=change-me-please`.
+2. `docker compose up -d --build`
+3. DNS A record `chatbot.supernand.tech` → VPS IP
+4. Host nginx reverse-proxy to `127.0.0.1:3000` + Certbot SSL
 
 Example host nginx (SSE buffering off):
 
@@ -141,7 +145,7 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_buffering off;
-        proxy_read_timeout 120s;
+        proxy_read_timeout 75s;
     }
 }
 ```

@@ -15,6 +15,8 @@ const stubDims = 64
 // Embedder produces vector embeddings for text batches.
 type Embedder interface {
 	Embed(ctx context.Context, texts []string) ([][]float32, error)
+	Model() string
+	VectorDims() int
 }
 
 // StubEmbedder returns deterministic pseudo-embeddings from text hashes.
@@ -47,6 +49,17 @@ func (s *StubEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, 
 		out[i] = stubVector(t, dims)
 	}
 	return out, nil
+}
+
+// Model identifies this embedder for storage/versioning.
+func (s *StubEmbedder) Model() string { return "stub/hash-v1" }
+
+// VectorDims is the vector width produced by StubEmbedder.
+func (s *StubEmbedder) VectorDims() int {
+	if s.Dims <= 0 {
+		return stubDims
+	}
+	return s.Dims
 }
 
 func stubVector(text string, dims int) []float32 {

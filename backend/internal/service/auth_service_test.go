@@ -78,8 +78,38 @@ func TestRegister_DuplicateEmail(t *testing.T) {
 		t.Fatalf("first register: %v", err)
 	}
 	_, err := svc.Register(ctx, "B", "dup@example.com", "secret123")
+	if !errors.Is(err, service.ErrRegisterClosed) {
+		t.Fatalf("err = %v, want ErrRegisterClosed", err)
+	}
+}
+
+func TestRegister_OpenDuplicateEmail(t *testing.T) {
+	dir := t.TempDir()
+	db, err := database.Open(filepath.Join(dir, "test.db"), filepath.Join(dir, "uploads"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	svc := service.NewAuthServiceWithPolicy(repository.NewUserRepo(db), "test-secret", "open", "")
+	ctx := context.Background()
+	if _, err := svc.Register(ctx, "A", "dup@example.com", "secret123"); err != nil {
+		t.Fatalf("first register: %v", err)
+	}
+	_, err = svc.Register(ctx, "B", "dup@example.com", "secret123")
 	if !errors.Is(err, repository.ErrEmailTaken) {
 		t.Fatalf("err = %v, want ErrEmailTaken", err)
+	}
+}
+
+func TestRegister_SecondUserClosed(t *testing.T) {
+	svc := newTestAuthService(t)
+	ctx := context.Background()
+	if _, err := svc.Register(ctx, "A", "one@example.com", "secret123"); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	_, err := svc.Register(ctx, "B", "two@example.com", "secret123")
+	if !errors.Is(err, service.ErrRegisterClosed) {
+		t.Fatalf("err = %v, want ErrRegisterClosed", err)
 	}
 }
 

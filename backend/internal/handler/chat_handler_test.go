@@ -46,6 +46,7 @@ func setupFullRouter(t *testing.T, llm ai.LLMProvider) *gin.Engine {
 
 	chatSvc := service.NewChatService(
 		users,
+		repository.NewDocumentRepo(db),
 		repository.NewChunkRepo(db),
 		repository.NewConversationRepo(db),
 		repository.NewMessageRepo(db),
@@ -53,7 +54,9 @@ func setupFullRouter(t *testing.T, llm ai.LLMProvider) *gin.Engine {
 		embedder,
 		llm,
 	)
-	settingsH := handler.NewSettingsHandler(service.NewSettingsService(users, repository.NewSettingsRepo(db)))
+	settingsSvc := service.NewSettingsService(users, repository.NewSettingsRepo(db), repository.NewDocumentRepo(db))
+	settingsSvc.SetRegisterStatus(authSvc.RegisterStatus)
+	settingsH := handler.NewSettingsHandler(settingsSvc)
 	convoH := handler.NewConversationHandler(service.NewConversationService(
 		repository.NewConversationRepo(db),
 		repository.NewMessageRepo(db),
@@ -63,6 +66,7 @@ func setupFullRouter(t *testing.T, llm ai.LLMProvider) *gin.Engine {
 	r := gin.New()
 	v1 := r.Group("/api/v1")
 	v1.POST("/auth/register", authH.Register)
+	v1.GET("/auth/register-status", authH.RegisterStatus)
 	v1.POST("/auth/login", authH.Login)
 	v1.GET("/bot", settingsH.PublicBot)
 	v1.POST("/chat", handler.NewChatHandler(chatSvc).Chat)
@@ -154,13 +158,13 @@ func TestChatSSE_SourcesTokenDone(t *testing.T) {
 		t.Fatalf("done events = %d", len(ev["done"]))
 	}
 	var done struct {
-		ConversationID int64 `json:"conversation_id"`
-		MessageID      int64 `json:"message_id"`
+		ConversationID string `json:"conversation_id"`
+		MessageID      int64  `json:"message_id"`
 	}
 	if err := json.Unmarshal(ev["done"][0], &done); err != nil {
 		t.Fatalf("done json: %v", err)
 	}
-	if done.ConversationID == 0 || done.MessageID == 0 {
+	if done.ConversationID == "" || done.MessageID == 0 {
 		t.Fatalf("done payload %+v", done)
 	}
 

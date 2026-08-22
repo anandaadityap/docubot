@@ -22,4 +22,6 @@ type PublicBot struct {
 	WelcomeMessage string `json:"welcome_message"`
 	BotActive      bool   `json:"bot_active"`
 	Configured     bool   `json:"configured"`
+	HasReadyKB     bool   `json:"has_ready_kb"`
+	RegisterOpen   bool   `json:"register_open"`
 }

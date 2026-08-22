@@ -65,7 +65,7 @@ export function SettingsPage() {
           />
           Bot aktif
         </label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <Label>Temperature</Label>
             <Input
@@ -76,6 +76,7 @@ export function SettingsPage() {
               value={form.temperature}
               onChange={(e) => setForm({ ...form, temperature: Number(e.target.value) })}
             />
+            <p className="mt-1 text-xs text-muted">0 = jawaban lebih kaku dan setia ke dokumen. Naikkan sedikit jika jawaban terlalu kaku.</p>
           </div>
           <div>
             <Label>Max tokens</Label>
@@ -86,6 +87,7 @@ export function SettingsPage() {
               value={form.max_tokens}
               onChange={(e) => setForm({ ...form, max_tokens: Number(e.target.value) })}
             />
+            <p className="mt-1 text-xs text-muted">Batas panjang jawaban. Lebih besar = lebih mahal dan lebih lama.</p>
           </div>
           <div>
             <Label>Top-k</Label>
@@ -96,6 +98,7 @@ export function SettingsPage() {
               value={form.top_k}
               onChange={(e) => setForm({ ...form, top_k: Number(e.target.value) })}
             />
+            <p className="mt-1 text-xs text-muted">Berapa cuplikan dokumen yang dibaca bot. 3–8 biasanya cukup.</p>
           </div>
           <div>
             <Label>Min score</Label>
@@ -107,6 +110,7 @@ export function SettingsPage() {
               value={form.min_score}
               onChange={(e) => setForm({ ...form, min_score: Number(e.target.value) })}
             />
+            <p className="mt-1 text-xs text-muted">Ambang kemiripan. Terlalu tinggi bot sering bilang tidak tahu; terlalu rendah jawaban bisa nyasar.</p>
           </div>
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}

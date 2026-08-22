@@ -10,7 +10,7 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
-        timeout: 120_000,
+        timeout: 90_000,
       },
       '/healthz': {
         target: 'http://localhost:8080',

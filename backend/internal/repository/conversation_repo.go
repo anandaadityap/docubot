@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/supernand/docubot/backend/internal/models"
 )
 
@@ -13,6 +14,7 @@ import (
 type ConversationRepository interface {
 	Create(ctx context.Context, userID int64, title string) (*models.Conversation, error)
 	GetByIDForUser(ctx context.Context, id, userID int64) (*models.Conversation, error)
+	GetByPublicID(ctx context.Context, publicID string, userID int64) (*models.Conversation, error)
 	ListByUser(ctx context.Context, userID int64, page, limit int) ([]models.Conversation, int, error)
 	TouchTitle(ctx context.Context, id int64, title string) error
 }
@@ -27,11 +29,17 @@ func NewConversationRepo(db *sql.DB) *ConversationRepo {
 	return &ConversationRepo{db: db}
 }
 
-// Create inserts a conversation.
+const convoSelect = `
+		SELECT c.id, c.public_id, c.user_id, c.title, c.created_at, c.updated_at,
+		       (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id)
+		FROM conversations c`
+
+// Create inserts a conversation with an opaque public_id (UUID).
 func (r *ConversationRepo) Create(ctx context.Context, userID int64, title string) (*models.Conversation, error) {
+	publicID := uuid.NewString()
 	res, err := r.db.ExecContext(ctx,
-		`INSERT INTO conversations (user_id, title) VALUES (?, ?)`,
-		userID, title,
+		`INSERT INTO conversations (user_id, public_id, title) VALUES (?, ?, ?)`,
+		userID, publicID, title,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert conversation: %w", err)
@@ -43,14 +51,20 @@ func (r *ConversationRepo) Create(ctx context.Context, userID int64, title strin
 	return r.GetByIDForUser(ctx, id, userID)
 }
 
-// GetByIDForUser loads a conversation owned by userID.
+// GetByIDForUser loads a conversation owned by userID (admin).
 func (r *ConversationRepo) GetByIDForUser(ctx context.Context, id, userID int64) (*models.Conversation, error) {
-	row := r.db.QueryRowContext(ctx, `
-		SELECT c.id, c.user_id, c.title, c.created_at, c.updated_at,
-		       (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id)
-		FROM conversations c
+	row := r.db.QueryRowContext(ctx, convoSelect+`
 		WHERE c.id = ? AND c.user_id = ?`,
 		id, userID,
+	)
+	return scanConversation(row)
+}
+
+// GetByPublicID loads a conversation by opaque public token for the bot owner.
+func (r *ConversationRepo) GetByPublicID(ctx context.Context, publicID string, userID int64) (*models.Conversation, error) {
+	row := r.db.QueryRowContext(ctx, convoSelect+`
+		WHERE c.public_id = ? AND c.user_id = ?`,
+		publicID, userID,
 	)
 	return scanConversation(row)
 }
@@ -72,10 +86,7 @@ func (r *ConversationRepo) ListByUser(ctx context.Context, userID int64, page, l
 		return nil, 0, fmt.Errorf("count conversations: %w", err)
 	}
 
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT c.id, c.user_id, c.title, c.created_at, c.updated_at,
-		       (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id)
-		FROM conversations c
+	rows, err := r.db.QueryContext(ctx, convoSelect+`
 		WHERE c.user_id = ?
 		ORDER BY c.id DESC
 		LIMIT ? OFFSET ?`,
@@ -126,7 +137,7 @@ func scanConversation(row *sql.Row) (*models.Conversation, error) {
 func scanConversationRow(row scannable) (*models.Conversation, error) {
 	var c models.Conversation
 	var createdAt, updatedAt string
-	err := row.Scan(&c.ID, &c.UserID, &c.Title, &createdAt, &updatedAt, &c.MessageCount)
+	err := row.Scan(&c.ID, &c.PublicID, &c.UserID, &c.Title, &createdAt, &updatedAt, &c.MessageCount)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound

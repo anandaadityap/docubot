@@ -9,6 +9,8 @@ export type PublicBot = {
   welcome_message: string
   bot_active: boolean
   configured: boolean
+  has_ready_kb: boolean
+  register_open: boolean
 }
 
 export type ChatSource = {
@@ -26,6 +28,8 @@ export type Document = {
   status: 'pending' | 'processing' | 'ready' | 'failed'
   error_msg?: string
   chunk_count: number
+  embed_model?: string
+  embed_dim?: number
   created_at?: string
   updated_at?: string
 }
@@ -65,6 +69,8 @@ export type Overview = {
   total_messages: number
   total_bot_messages: number
   avg_latency_ms: number
+  total_tokens: number
+  estimated_usd: number
   daily: { date: string; chats: number }[]
 }
 

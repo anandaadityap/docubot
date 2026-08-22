@@ -34,6 +34,7 @@ func setupAuthRouter(t *testing.T) *gin.Engine {
 	r := gin.New()
 	v1 := r.Group("/api/v1")
 	v1.POST("/auth/register", authH.Register)
+	v1.GET("/auth/register-status", authH.RegisterStatus)
 	v1.POST("/auth/login", authH.Login)
 	authed := v1.Group("")
 	authed.Use(middleware.Auth(secret))
@@ -90,8 +91,8 @@ func TestAuthRegister_EmailTaken(t *testing.T) {
 		t.Fatalf("first: %d %s", w.Code, w.Body.String())
 	}
 	w := postJSON(r, "/api/v1/auth/register", body)
-	if w.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want 409 body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 body=%s", w.Code, w.Body.String())
 	}
 }
 

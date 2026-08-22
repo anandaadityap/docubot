@@ -9,7 +9,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// Open opens SQLite at databasePath, enables foreign keys, runs migrations,
+// Open opens SQLite at databasePath, enables WAL + foreign keys, runs migrations,
 // and ensures uploadDir exists.
 func Open(databasePath, uploadDir string) (*sql.DB, error) {
 	if err := os.MkdirAll(filepath.Dir(databasePath), 0o755); err != nil {
@@ -19,7 +19,8 @@ func Open(databasePath, uploadDir string) (*sql.DB, error) {
 		return nil, fmt.Errorf("create upload directory: %w", err)
 	}
 
-	db, err := sql.Open("sqlite", databasePath)
+	dsn := databasePath + "?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
@@ -37,9 +38,14 @@ func Open(databasePath, uploadDir string) (*sql.DB, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("set busy_timeout: %w", err)
 	}
+	if _, err := db.Exec(`PRAGMA journal_mode = WAL`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("enable wal: %w", err)
+	}
 
-	// Serialize writes: ingest pipeline runs in a goroutine alongside HTTP handlers.
-	db.SetMaxOpenConns(1)
+	// WAL allows concurrent readers while ingest writes.
+	db.SetMaxOpenConns(4)
+	db.SetMaxIdleConns(4)
 
 	if err := Migrate(db); err != nil {
 		_ = db.Close()

@@ -36,13 +36,16 @@ export function MessageBubble({
   content,
   sources,
   streaming,
+  truncated,
 }: {
   role: 'user' | 'bot'
   content: string
   sources?: ChatSource[]
   streaming?: boolean
+  truncated?: boolean
 }) {
   const isUser = role === 'user'
+  const showSources = !isUser && Boolean(sources?.length) && !streaming
   return (
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
       <div
@@ -57,6 +60,15 @@ export function MessageBubble({
           <div>
             <BotRichText text={content} sources={sources} />
             {streaming && <span className="ml-0.5 inline-block h-3 w-0.5 animate-pulse bg-brand align-middle" />}
+            {truncated && <p className="mt-1 text-[11px] text-amber-700">Jawaban mungkin terpotong.</p>}
+            {showSources && (
+              <div className="mt-2 flex flex-wrap gap-1 border-t border-slate-100 pt-2">
+                <span className="mr-1 text-[11px] text-muted">Sumber:</span>
+                {sources!.map((s, i) => (
+                  <SourceChip key={`${s.doc_id}-${i}`} index={i + 1} source={s} />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -21,7 +21,7 @@ type TopQuestion struct {
 
 // AnalyticsRepository computes dashboard aggregates.
 type AnalyticsRepository interface {
-	Overview(ctx context.Context, userID int64, since time.Time) (totalConv, totalMsg, totalBot int, avgLatency float64, daily []DailyStat, err error)
+	Overview(ctx context.Context, userID int64, since time.Time) (totalConv, totalMsg, totalBot int, avgLatency float64, totalTokens int, daily []DailyStat, err error)
 	TopQuestions(ctx context.Context, userID int64, limit int) ([]TopQuestion, error)
 }
 
@@ -36,26 +36,26 @@ func NewAnalyticsRepo(db *sql.DB) *AnalyticsRepo {
 }
 
 // Overview returns totals, average bot latency, and daily conversation counts since `since`.
-func (r *AnalyticsRepo) Overview(ctx context.Context, userID int64, since time.Time) (int, int, int, float64, []DailyStat, error) {
+func (r *AnalyticsRepo) Overview(ctx context.Context, userID int64, since time.Time) (int, int, int, float64, int, []DailyStat, error) {
 	var totalConv, totalMsg, totalBot int
 	if err := r.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM conversations WHERE user_id = ?`, userID,
 	).Scan(&totalConv); err != nil {
-		return 0, 0, 0, 0, nil, fmt.Errorf("count conversations: %w", err)
+		return 0, 0, 0, 0, 0, nil, fmt.Errorf("count conversations: %w", err)
 	}
 	if err := r.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM messages m
 		INNER JOIN conversations c ON c.id = m.conversation_id
 		WHERE c.user_id = ?`, userID,
 	).Scan(&totalMsg); err != nil {
-		return 0, 0, 0, 0, nil, fmt.Errorf("count messages: %w", err)
+		return 0, 0, 0, 0, 0, nil, fmt.Errorf("count messages: %w", err)
 	}
 	if err := r.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM messages m
 		INNER JOIN conversations c ON c.id = m.conversation_id
 		WHERE c.user_id = ? AND m.role = 'bot'`, userID,
 	).Scan(&totalBot); err != nil {
-		return 0, 0, 0, 0, nil, fmt.Errorf("count bot messages: %w", err)
+		return 0, 0, 0, 0, 0, nil, fmt.Errorf("count bot messages: %w", err)
 	}
 
 	var avg sql.NullFloat64
@@ -64,7 +64,16 @@ func (r *AnalyticsRepo) Overview(ctx context.Context, userID int64, since time.T
 		INNER JOIN conversations c ON c.id = m.conversation_id
 		WHERE c.user_id = ? AND m.role = 'bot' AND m.latency_ms IS NOT NULL`, userID,
 	).Scan(&avg); err != nil {
-		return 0, 0, 0, 0, nil, fmt.Errorf("avg latency: %w", err)
+		return 0, 0, 0, 0, 0, nil, fmt.Errorf("avg latency: %w", err)
+	}
+
+	var totalTokens sql.NullInt64
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT COALESCE(SUM(m.token_usage), 0) FROM messages m
+		INNER JOIN conversations c ON c.id = m.conversation_id
+		WHERE c.user_id = ? AND m.role = 'bot'`, userID,
+	).Scan(&totalTokens); err != nil {
+		return 0, 0, 0, 0, 0, nil, fmt.Errorf("sum tokens: %w", err)
 	}
 
 	rows, err := r.db.QueryContext(ctx, `
@@ -76,7 +85,7 @@ func (r *AnalyticsRepo) Overview(ctx context.Context, userID int64, since time.T
 		userID, since.UTC().Format("2006-01-02"),
 	)
 	if err != nil {
-		return 0, 0, 0, 0, nil, fmt.Errorf("daily chats: %w", err)
+		return 0, 0, 0, 0, 0, nil, fmt.Errorf("daily chats: %w", err)
 	}
 	defer rows.Close()
 
@@ -84,12 +93,12 @@ func (r *AnalyticsRepo) Overview(ctx context.Context, userID int64, since time.T
 	for rows.Next() {
 		var st DailyStat
 		if err := rows.Scan(&st.Date, &st.Chats); err != nil {
-			return 0, 0, 0, 0, nil, fmt.Errorf("scan daily: %w", err)
+			return 0, 0, 0, 0, 0, nil, fmt.Errorf("scan daily: %w", err)
 		}
 		daily = append(daily, st)
 	}
 	if err := rows.Err(); err != nil {
-		return 0, 0, 0, 0, nil, fmt.Errorf("daily rows: %w", err)
+		return 0, 0, 0, 0, 0, nil, fmt.Errorf("daily rows: %w", err)
 	}
 	if daily == nil {
 		daily = []DailyStat{}
@@ -99,7 +108,11 @@ func (r *AnalyticsRepo) Overview(ctx context.Context, userID int64, since time.T
 	if avg.Valid {
 		avgVal = avg.Float64
 	}
-	return totalConv, totalMsg, totalBot, avgVal, daily, nil
+	tok := 0
+	if totalTokens.Valid {
+		tok = int(totalTokens.Int64)
+	}
+	return totalConv, totalMsg, totalBot, avgVal, tok, daily, nil
 }
 
 // TopQuestions returns the most frequent user messages.

@@ -5,7 +5,7 @@ export type ChatEvent =
   | { type: 'sources'; sources: ChatSource[] }
   | { type: 'token'; content: string }
   | { type: 'inactive'; message: string }
-  | { type: 'done'; conversation_id: number; message_id: number; total_tokens: number; latency_ms: number }
+  | { type: 'done'; conversation_id: string; message_id: number; total_tokens: number; latency_ms: number }
   | { type: 'error'; code: string; message: string }
 
 function parseBlock(block: string): ChatEvent | null {
@@ -30,7 +30,7 @@ function parseBlock(block: string): ChatEvent | null {
     if (event === 'done') {
       return {
         type: 'done',
-        conversation_id: Number(payload.conversation_id),
+        conversation_id: String(payload.conversation_id ?? ''),
         message_id: Number(payload.message_id),
         total_tokens: Number(payload.total_tokens ?? 0),
         latency_ms: Number(payload.latency_ms ?? 0),
@@ -47,7 +47,7 @@ function parseBlock(block: string): ChatEvent | null {
 
 export async function streamChat(
   message: string,
-  conversationId: number | null,
+  conversationId: string | null,
   onEvent: (ev: ChatEvent) => void,
   signal?: AbortSignal,
 ) {
@@ -101,4 +101,8 @@ export async function streamChat(
 
 export const botApi = {
   public: () => api<import('./types').PublicBot>('/api/v1/bot'),
+}
+
+export const authPublicApi = {
+  registerStatus: () => api<{ open: boolean; mode: string }>('/api/v1/auth/register-status'),
 }

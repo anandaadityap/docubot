@@ -28,26 +28,46 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	// ErrUnauthorized is returned when a token is missing/invalid/expired.
 	ErrUnauthorized = errors.New("unauthorized")
+	// ErrRegisterClosed is returned when public registration is not allowed.
+	ErrRegisterClosed = errors.New("registration closed")
 )
 
 // AuthService handles registration, login, and JWT helpers.
 type AuthService struct {
-	users  repository.UserRepository
-	secret []byte
-	now    func() time.Time
+	users          repository.UserRepository
+	secret         []byte
+	now            func() time.Time
+	registerMode   string
+	registerInvite string
 }
 
-// NewAuthService constructs an AuthService.
+// NewAuthService constructs an AuthService (first-user-only registration).
 func NewAuthService(users repository.UserRepository, jwtSecret string) *AuthService {
+	return NewAuthServiceWithPolicy(users, jwtSecret, "first-only", "")
+}
+
+// NewAuthServiceWithPolicy constructs an AuthService with a register policy.
+// mode: first-only (default) | open | closed
+func NewAuthServiceWithPolicy(users repository.UserRepository, jwtSecret, mode, invite string) *AuthService {
 	return &AuthService{
-		users:  users,
-		secret: []byte(jwtSecret),
-		now:    time.Now,
+		users:          users,
+		secret:         []byte(jwtSecret),
+		now:            time.Now,
+		registerMode:   normalizeRegisterMode(mode),
+		registerInvite: strings.TrimSpace(invite),
 	}
 }
 
 // Register creates a new admin user (password hashed with bcrypt).
 func (s *AuthService) Register(ctx context.Context, name, email, password string) (*models.User, error) {
+	return s.RegisterWithInvite(ctx, name, email, password, "")
+}
+
+// RegisterWithInvite creates a user, optionally consuming an invite code.
+func (s *AuthService) RegisterWithInvite(ctx context.Context, name, email, password, invite string) (*models.User, error) {
+	if err := s.guardRegister(ctx, invite); err != nil {
+		return nil, err
+	}
 	email, err := normalizeEmail(email)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrValidation, err.Error())
@@ -70,6 +90,59 @@ func (s *AuthService) Register(ctx context.Context, name, email, password string
 		return nil, fmt.Errorf("create user: %w", err)
 	}
 	return user, nil
+}
+
+// RegisterStatus reports whether unauthenticated register is currently allowed without an invite.
+func (s *AuthService) RegisterStatus(ctx context.Context) (open bool, mode string, err error) {
+	mode = s.registerMode
+	switch mode {
+	case "open":
+		return true, mode, nil
+	case "closed":
+		return false, mode, nil
+	default:
+		n, err := s.users.Count(ctx)
+		if err != nil {
+			return false, mode, err
+		}
+		return n == 0, "first-only", nil
+	}
+}
+
+func (s *AuthService) guardRegister(ctx context.Context, invite string) error {
+	invite = strings.TrimSpace(invite)
+	switch s.registerMode {
+	case "open":
+		return nil
+	case "closed":
+		if s.registerInvite != "" && invite == s.registerInvite {
+			return nil
+		}
+		return ErrRegisterClosed
+	default:
+		n, err := s.users.Count(ctx)
+		if err != nil {
+			return fmt.Errorf("count users: %w", err)
+		}
+		if n == 0 {
+			return nil
+		}
+		if s.registerInvite != "" && invite == s.registerInvite {
+			return nil
+		}
+		return ErrRegisterClosed
+	}
+}
+
+func normalizeRegisterMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "open":
+		return "open"
+	case "closed":
+		return "closed"
+	default:
+		return "first-only"
+	}
 }
 
 // LoginResult is returned on successful login.

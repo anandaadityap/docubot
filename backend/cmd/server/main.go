@@ -17,7 +17,10 @@ import (
 func main() {
 	cfg := config.Load()
 
-	if cfg.JWTSecret == "" || cfg.JWTSecret == "change-me-please" {
+	if config.WeakJWTSecret(cfg.JWTSecret) {
+		if config.IsProduction(cfg.AppEnv) {
+			log.Fatal("JWT_SECRET is missing or using the insecure default; set a strong secret before running in production")
+		}
 		log.Printf("warning: JWT_SECRET is using the insecure default; set a strong secret in production")
 	}
 
@@ -28,7 +31,7 @@ func main() {
 	defer db.Close()
 
 	userRepo := repository.NewUserRepo(db)
-	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
+	authSvc := service.NewAuthServiceWithPolicy(userRepo, cfg.JWTSecret, cfg.RegisterMode, cfg.RegisterInvite)
 	authH := handler.NewAuthHandler(authSvc)
 
 	var embedder ai.Embedder
@@ -47,29 +50,27 @@ func main() {
 		llm = &ai.StubLLM{}
 	}
 
-	docSvc := service.NewDocumentService(
-		repository.NewDocumentRepo(db),
-		repository.NewChunkRepo(db),
-		embedder,
-		cfg.UploadDir,
-	)
-	docH := handler.NewDocumentHandler(docSvc)
-
+	docRepo := repository.NewDocumentRepo(db)
 	chunkRepo := repository.NewChunkRepo(db)
 	convoRepo := repository.NewConversationRepo(db)
 	msgRepo := repository.NewMessageRepo(db)
 	settingsRepo := repository.NewSettingsRepo(db)
 
-	chatSvc := service.NewChatService(userRepo, chunkRepo, convoRepo, msgRepo, settingsRepo, embedder, llm)
+	docSvc := service.NewDocumentService(docRepo, chunkRepo, embedder, cfg.UploadDir)
+	docH := handler.NewDocumentHandler(docSvc)
+
+	chatSvc := service.NewChatService(userRepo, docRepo, chunkRepo, convoRepo, msgRepo, settingsRepo, embedder, llm)
 	chatH := handler.NewChatHandler(chatSvc)
 
-	settingsSvc := service.NewSettingsService(userRepo, settingsRepo)
+	settingsSvc := service.NewSettingsService(userRepo, settingsRepo, docRepo)
+	settingsSvc.SetRegisterStatus(authSvc.RegisterStatus)
 	settingsH := handler.NewSettingsHandler(settingsSvc)
 
 	convoSvc := service.NewConversationService(convoRepo, msgRepo)
 	convoH := handler.NewConversationHandler(convoSvc)
 
 	analyticsSvc := service.NewAnalyticsService(repository.NewAnalyticsRepo(db))
+	analyticsSvc.SetUSDPerMillion(cfg.TokenUSDPerM)
 	analyticsH := handler.NewAnalyticsHandler(analyticsSvc)
 
 	r := gin.Default()
@@ -77,14 +78,16 @@ func main() {
 	r.Use(middleware.CORS(cfg.CORSOrigins))
 	r.GET("/healthz", handler.Health)
 
-	limiter := middleware.NewRateLimiter(10, 0)
+	chatLimiter := middleware.NewRateLimiter(10, 0)
+	authLimiter := middleware.NewRateLimiter(5, 0)
 
 	v1 := r.Group("/api/v1")
 	{
-		v1.POST("/auth/register", authH.Register)
-		v1.POST("/auth/login", authH.Login)
+		v1.GET("/auth/register-status", authH.RegisterStatus)
+		v1.POST("/auth/register", middleware.IPRateLimit(authLimiter), authH.Register)
+		v1.POST("/auth/login", middleware.IPRateLimit(authLimiter), authH.Login)
 		v1.GET("/bot", settingsH.PublicBot)
-		v1.POST("/chat", middleware.ChatRateLimit(limiter), chatH.Chat)
+		v1.POST("/chat", middleware.ChatRateLimit(chatLimiter), chatH.Chat)
 
 		authed := v1.Group("")
 		authed.Use(middleware.AuthWithParser(authSvc))

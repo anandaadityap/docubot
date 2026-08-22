@@ -52,6 +52,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!res.ok) {
     if (res.status === 401 && path !== '/api/v1/auth/login') {
       setToken(null)
+      window.dispatchEvent(new CustomEvent('docubot:unauthorized'))
     }
     throw await parseError(res)
   }
