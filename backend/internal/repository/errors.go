@@ -1,0 +1,10 @@
+package repository
+
+import "errors"
+
+var (
+	// ErrNotFound is returned when a row does not exist.
+	ErrNotFound = errors.New("not found")
+	// ErrEmailTaken is returned when registering with an existing email.
+	ErrEmailTaken = errors.New("email already taken")
+)

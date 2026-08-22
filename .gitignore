@@ -1,0 +1,31 @@
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+
+# Data (SQLite + uploads)
+data/
+
+# Backend
+backend/tmp/
+backend/*.exe
+backend/server
+backend/bin/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs & coverage
+*.log
+coverage/
+*.out
