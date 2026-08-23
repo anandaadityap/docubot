@@ -6,6 +6,12 @@ License: [MIT](./LICENSE). Live demo: **https://chatbot.supernand.tech** (Docker
 
 This is **not** a hosted SaaS, not multi-tenant, and not an npm chat widget.
 
+## Screenshots
+
+![Landing](docs/screenshots/landing.png)
+
+![Chat embed (iframe)](docs/screenshots/chat-embed.png)
+
 ## Problem → what you get
 
 Small teams answer the same FAQ all day; the answers already live in Markdown/TXT. DocuBot retrieves those chunks, streams a cited answer (SSE), and lets you **iframe** the same chat onto a client site.
