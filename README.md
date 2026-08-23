@@ -1,14 +1,22 @@
 # DocuBot
 
-Self-host AI support bot with a knowledge base (RAG) — Go (Gin) + React + SQLite + DeepSeek/OpenAI.
+Self-host AI support bot with a knowledge base (RAG). **Go (Gin) + React + SQLite + DeepSeek/OpenAI.**
 
-License: [MIT](./LICENSE). Live target: `https://chatbot.supernand.tech` (Docker Compose + host nginx).
+License: [MIT](./LICENSE). Intended public demo: `https://chatbot.supernand.tech` (Docker Compose + host nginx). **That URL is not claimed live yet** — until it is, use Quick start below.
 
-## What it does
+This is **not** a hosted SaaS, not multi-tenant, and not an npm chat widget.
 
-You run DocuBot on your own VPS. Visitors chat at `/b/{slug}`; you embed the same page in a client site with an iframe. The bot retrieves chunks from uploaded `.md`/`.txt` documents, streams an answer (SSE), and cites sources. Admins upload files, copy the iframe snippet, review conversations, and watch 14-day analytics.
+## Problem → what you get
 
-The homepage (`/`) is a landing page, not the chat widget.
+Small teams answer the same FAQ all day; the answers already live in Markdown/TXT. DocuBot retrieves those chunks, streams a cited answer (SSE), and lets you **iframe** the same chat onto a client site.
+
+You run it on your VPS. Visitors chat at `/b/{slug}`. Admins upload files, copy the iframe snippet, review conversations, and watch 14-day analytics.
+
+Homepage (`/`) is a landing page, not the widget.
+
+**Scale (honest):** retrieval is in-process cosine similarity over SQLite JSON embeddings. Fine for a typical FAQ corpus (comfortably under ~10k chunks). Not a pgvector cluster.
+
+**Security model:** LLM keys stay on the server. Admin JWT is in `localStorage`. Public chat is unauthenticated and rate-limited. Iframes load DocuBot same-origin (no shop CORS). There is **no** per-bot `frame-ancestors` allowlist yet — see [SECURITY.md](./SECURITY.md).
 
 ## Quick start
 
@@ -74,11 +82,13 @@ The iframe loads DocuBot's own page; JavaScript inside it calls `/api/v1/...` **
 
 Dummy page for local tes: `misc/example/embed-dummy.html` (replace `SLUG`, open via a static server or the file path).
 
-## Tests
+## Tests and CI
 
 ```bash
 cd backend && go test ./...
 ```
+
+GitHub Actions runs backend tests and the frontend production build on push/PR (`.github/workflows/ci.yml`).
 
 On some Windows setups, WDAC blocks `handler.test.exe` in the Go cache. Compile with another name:
 
@@ -189,7 +199,14 @@ server {
 - `frontend/` — React (Vite + Tailwind)
 - `data/` — SQLite DB + uploads (runtime, gitignored)
 - `scripts/` — benchmark
-- `misc/` — BRD/PRD, V2 plan, dummy embed HTML
+- `misc/` — internal planning notes (see [`misc/README.md`](./misc/README.md)); not the public pitch
+
+## Docs
+
+- [CONTRIBUTING.md](./CONTRIBUTING.md) — run, test, PR scope
+- [SECURITY.md](./SECURITY.md) — secrets, JWT, iframe
+- [CHANGELOG.md](./CHANGELOG.md) — 0.2.0 = slug + landing + iframe
+- [`misc/CONTEXT-OSS-PORTFOLIO.md`](./misc/CONTEXT-OSS-PORTFOLIO.md) — remaining packaging work (live demo, screenshots, DeepSeek bench)
 
 ## Stack
 

@@ -5,6 +5,10 @@
 
 # Data (SQLite + uploads)
 data/
+data/
+*.db
+*.db-wal
+*.db-shm
 
 # Backend
 backend/tmp/

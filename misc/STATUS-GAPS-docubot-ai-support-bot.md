@@ -8,7 +8,7 @@
 | **Tanggal** | 22 Agustus 2026 |
 | **Konteks** | Produk MVP sudah jalan. v1.1 mencatat gap P0–P2 yang **sudah ditutup** di kode (commit setelah snapshot MVP). |
 
-> **Lanjutan (23 Agu 2026):** arah setelah MVP ada di [`PLAN-V2-docubot-selfhost-embed.md`](./PLAN-V2-docubot-selfhost-embed.md) (self-host, slug bot, landing, iframe). Plan itu **mengesampingkan** larangan widget di §2.2 / §5 untuk slice V2 saja; multi-tenant / PDF / channel chat tetap ditunda.
+> **Lanjutan (23 Agu 2026):** arah setelah MVP ada di [`PLAN-V2-docubot-selfhost-embed.md`](./PLAN-V2-docubot-selfhost-embed.md) (self-host, slug bot, landing, iframe). Plan itu **mengesampingkan** larangan widget di §2.2 / §5 untuk slice V2 saja; multi-tenant / PDF / channel chat tetap ditunda. Pekerjaan kemasan OSS/portofolio (bukan fitur) → [`CONTEXT-OSS-PORTFOLIO.md`](./CONTEXT-OSS-PORTFOLIO.md). §5 di dokumen ini **bukan** backlog aktif pasca-V2.
 
 ---
 

@@ -11,7 +11,7 @@
 | **Tech Stack** | Go (Gin) + SQLite + React (Vite + Tailwind) + DeepSeek/OpenAI LLM + RAG |
 | **Deploy** | VPS pribadi — Docker Compose + nginx, subdomain `chatbot.supernand.tech` |
 
-> **Dokumen terkait:** status implementasi MVP → [`STATUS-GAPS-docubot-ai-support-bot.md`](./STATUS-GAPS-docubot-ai-support-bot.md). Plan setelah MVP (V2 self-host + embed) → [`PLAN-V2-docubot-selfhost-embed.md`](./PLAN-V2-docubot-selfhost-embed.md). Untuk pekerjaan V2, ikuti plan itu; dokumen ini tetap acuan RAG/API/skema MVP.
+> **Dokumen terkait:** status implementasi MVP → [`STATUS-GAPS-docubot-ai-support-bot.md`](./STATUS-GAPS-docubot-ai-support-bot.md). Plan setelah MVP (V2 self-host + embed) → [`PLAN-V2-docubot-selfhost-embed.md`](./PLAN-V2-docubot-selfhost-embed.md). Kemasan OSS + portofolio setelah V2 → [`CONTEXT-OSS-PORTFOLIO.md`](./CONTEXT-OSS-PORTFOLIO.md). Untuk pekerjaan V2, ikuti plan itu; dokumen ini tetap acuan RAG/API/skema MVP. Jangan pakai §11 sebagai status terkini.
 
 ---
 

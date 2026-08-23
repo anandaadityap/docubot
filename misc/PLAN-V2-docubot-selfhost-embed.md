@@ -16,7 +16,8 @@ Dokumen ini **bukan pengganti** BRD/PRD dan **bukan pengganti** gap analysis MVP
 
 1. [`BRD-PRD-docubot-ai-support-bot.md`](./BRD-PRD-docubot-ai-support-bot.md) — ruang lingkup MVP, persona, FR/NFR, skema awal, API awal, prinsip desain. **Masih berlaku** untuk RAG, auth, dokumen, SSE, analytics, deploy Docker.
 2. [`STATUS-GAPS-docubot-ai-support-bot.md`](./STATUS-GAPS-docubot-ai-support-bot.md) — apa yang sudah di-ship vs BRD, gap P0–P2 yang **sudah ditutup**, peta file. Anggap MVP **selesai**.
-3. **Dokumen ini** — keputusan produk setelah MVP, dan plan V2 yang harus diimplementasi berikutnya.
+3. **Dokumen ini** — keputusan produk setelah MVP, dan plan V2 (kode V2 sudah implemented; lihat §3.2).
+4. [`CONTEXT-OSS-PORTFOLIO.md`](./CONTEXT-OSS-PORTFOLIO.md) — antrian **kemasan** OSS + portofolio setelah V2 (demo live, README, CI). Bukan sprint fitur.
 
 Contoh FAQ untuk tes/demo tetap di [`example/faq-toko-kita.md`](./example/faq-toko-kita.md) dan `frontend/public/samples/faq-contoh.md`.
 
@@ -666,6 +667,8 @@ Urutan **hanya jika** V2 live dan ada permintaan nyata:
 
 Jangan masuk backlog sprint V2.
 
+Kemasan (demo live, screenshot, CI, saring `misc/` publik) **bukan** item di atas — itu antrian [`CONTEXT-OSS-PORTFOLIO.md`](./CONTEXT-OSS-PORTFOLIO.md).
+
 ---
 
 ## 17. Riwayat dokumen
@@ -674,6 +677,7 @@ Jangan masuk backlog sprint V2.
 |---|---|---|
 | 1.0 | 23 Agu 2026 | Perkembangan pasca-MVP + plan implementasi V2 (self-host, slug, landing, iframe). Acuan: BRD v1.2, STATUS-GAPS v1.1. Kode belum diubah. |
 | 1.1 | 23 Agu 2026 | Implemented: tabel `bots`, chat `/b/:slug`, landing, Pasang + iframe, LICENSE MIT. DoD §3.2 dicentang kecuali rekaman demo. |
+| 1.1a | 23 Agu 2026 | Tautan ke [`CONTEXT-OSS-PORTFOLIO.md`](./CONTEXT-OSS-PORTFOLIO.md) untuk pekerjaan kemasan setelah V2. |
 
 Setelah implementasi merge: naikkan ke **1.1**, centang §3.2, catat commit/hash singkat.
 
