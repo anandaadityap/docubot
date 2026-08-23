@@ -1,12 +1,14 @@
 # DocuBot
 
-AI support bot with a knowledge base (RAG) — Go (Gin) + React + SQLite + DeepSeek/OpenAI.
+Self-host AI support bot with a knowledge base (RAG) — Go (Gin) + React + SQLite + DeepSeek/OpenAI.
 
-Live target: `https://chatbot.supernand.tech` (Docker Compose + host nginx).
+License: [MIT](./LICENSE). Live target: `https://chatbot.supernand.tech` (Docker Compose + host nginx).
 
 ## What it does
 
-Visitors ask questions on the public chat page. The bot retrieves relevant chunks from uploaded documents, streams an answer (SSE), and cites sources `[1] [2]`. Admins upload `.md`/`.txt`, review conversations, and watch 14-day analytics.
+You run DocuBot on your own VPS. Visitors chat at `/b/{slug}`; you embed the same page in a client site with an iframe. The bot retrieves chunks from uploaded `.md`/`.txt` documents, streams an answer (SSE), and cites sources. Admins upload files, copy the iframe snippet, review conversations, and watch 14-day analytics.
+
+The homepage (`/`) is a landing page, not the chat widget.
 
 ## Quick start
 
@@ -19,9 +21,12 @@ docker compose up --build
 # Health:   http://127.0.0.1:3000/healthz
 ```
 
-1. Open `/register` and create the **first** admin account (later sign-ups are closed; that first account owns the public bot).
-2. On **Dokumen**, upload a `.md`/`.txt` file — or download the sample FAQ from the empty state (no need to dig in the repo).
-3. Wait until status is `ready`, then chat on `/`. Follow-up questions stay in the same tab (refresh keeps the session; **Chat baru** starts over).
+1. Open `/register` and create the **first** admin account (later sign-ups are closed unless you change `REGISTER_MODE`).
+2. You land on **Pasang**. Upload a `.md`/`.txt` on **Dokumen** — or download the sample FAQ from the empty state.
+3. Wait until status is `ready`, test in the Pasang playground (or open `/b/{slug}`), then copy the iframe snippet.
+4. Paste the snippet into another HTML page (see `misc/example/embed-dummy.html`). Chat uses that bot's knowledge base.
+
+Follow-up questions stay in the same tab (refresh keeps the session **per slug**; **Chat baru** starts over).
 
 ### Local development (without Docker)
 
@@ -49,6 +54,25 @@ npm install
 npm run dev
 # Vite proxies /api and /healthz → localhost:8080
 ```
+
+## Embed (iframe)
+
+Copy from **Admin → Pasang**, or:
+
+```html
+<iframe
+  src="https://YOUR-HOST/b/YOUR-SLUG?embed=1"
+  title="DocuBot"
+  style="width:100%;height:640px;border:0;border-radius:12px"
+  loading="lazy"
+></iframe>
+```
+
+The iframe loads DocuBot's own page; JavaScript inside it calls `/api/v1/...` **same-origin**. You do not need CORS on the client shop.
+
+**Host nginx:** do **not** set `X-Frame-Options: DENY` or `SAMEORIGIN`, and do not set `Content-Security-Policy: frame-ancestors 'none'`, or sites cannot embed `/b/{slug}`. `frontend/nginx.conf` in this repo does not set those headers.
+
+Dummy page for local tes: `misc/example/embed-dummy.html` (replace `SLUG`, open via a static server or the file path).
 
 ## Tests
 
@@ -89,36 +113,44 @@ curl -s -X POST http://localhost:8080/api/v1/documents \
   -F "file=@backend/testdata/manual-pengguna.md"
 ```
 
-## Chat API (public, SSE)
+## Public bot & chat API (SSE)
 
 ```bash
-curl -N -X POST http://localhost:8080/api/v1/chat \
+# Profile
+curl -s http://localhost:8080/api/v1/bots/nanda
+
+# Landing demo pointer (oldest bot; configured=false if none)
+curl -s http://localhost:8080/api/v1/demo
+
+# Chat
+curl -N -X POST http://localhost:8080/api/v1/b/nanda/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"Gimana cara reset password?"}'
 ```
 
 Events: `sources` → `token`* → `done` (or `inactive` / `error`). `conversation_id` in `done` is an opaque UUID (send it back on the next turn). Rate limit: 10 requests/minute/IP. LLM/SSE timeout is 60s.
 
-Public bot profile (no JWT): `GET /api/v1/bot` (includes `has_ready_kb` and `register_open`).
+Unknown slug: HTTP 404 JSON (chat does not fall back to another bot). The old paths `POST /api/v1/chat` and `GET /api/v1/bot` return 400 and point to the slug URLs.
 
 ## Admin API
 
-- `GET/PUT /api/v1/settings`
-- `GET /api/v1/conversations?page=1&limit=20`
+- `GET/PUT /api/v1/admin/bot` (slug, name, welcome, active; frontend builds public URL from `window.location.origin`)
+- `GET/PUT /api/v1/settings` (RAG knobs; identity fields dual-write to `bots`)
+- `GET /api/v1/conversations?page=1&limit=20` (public channel only)
 - `GET /api/v1/conversations/:id`
-- `GET /api/v1/analytics/overview` (includes `total_tokens` and `estimated_usd`)
+- `GET /api/v1/analytics/overview` (includes `total_tokens` and `estimated_usd`; public channel)
 - `GET /api/v1/analytics/top-questions?limit=10`
 
 ## Benchmark
 
-With the API running (after a document is `ready`):
+With the API running (after a document is `ready`). Set `SLUG` if you do not want the script to read `GET /api/v1/demo`:
 
 ```bash
 # Git Bash / Linux / macOS
-BASE_URL=http://127.0.0.1:8080 ./scripts/bench.sh
+BASE_URL=http://127.0.0.1:8080 SLUG=nanda ./scripts/bench.sh
 
 # PowerShell
-.\scripts\bench.ps1 -BaseUrl http://127.0.0.1:8080
+.\scripts\bench.ps1 -BaseUrl http://127.0.0.1:8080 -Slug nanda
 ```
 
 The script prints wall time, **time-to-first-token** (`ttft_ms`), server `latency_ms`, token usage, and an estimated USD cost using DeepSeek-chat list prices (override `OUT_PER_M` / `-OutPerMillion`). Record a real DeepSeek run in this README after deploy.
@@ -131,6 +163,7 @@ The script prints wall time, **time-to-first-token** (`ttft_ms`), server `latenc
 2. `docker compose up -d --build`
 3. DNS A record `chatbot.supernand.tech` → VPS IP
 4. Host nginx reverse-proxy to `127.0.0.1:3000` + Certbot SSL
+5. Do **not** add `X-Frame-Options: DENY` / `SAMEORIGIN` on `/` or `/b/` if you need iframe embed
 
 Example host nginx (SSE buffering off):
 
@@ -156,7 +189,7 @@ server {
 - `frontend/` — React (Vite + Tailwind)
 - `data/` — SQLite DB + uploads (runtime, gitignored)
 - `scripts/` — benchmark
-- `misc/` — BRD/PRD
+- `misc/` — BRD/PRD, V2 plan, dummy embed HTML
 
 ## Stack
 

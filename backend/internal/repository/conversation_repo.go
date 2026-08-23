@@ -12,7 +12,7 @@ import (
 
 // ConversationRepository persists chat sessions.
 type ConversationRepository interface {
-	Create(ctx context.Context, userID int64, title string) (*models.Conversation, error)
+	Create(ctx context.Context, userID int64, title, channel string) (*models.Conversation, error)
 	GetByIDForUser(ctx context.Context, id, userID int64) (*models.Conversation, error)
 	GetByPublicID(ctx context.Context, publicID string, userID int64) (*models.Conversation, error)
 	ListByUser(ctx context.Context, userID int64, page, limit int) ([]models.Conversation, int, error)
@@ -35,11 +35,14 @@ const convoSelect = `
 		FROM conversations c`
 
 // Create inserts a conversation with an opaque public_id (UUID).
-func (r *ConversationRepo) Create(ctx context.Context, userID int64, title string) (*models.Conversation, error) {
+func (r *ConversationRepo) Create(ctx context.Context, userID int64, title, channel string) (*models.Conversation, error) {
 	publicID := uuid.NewString()
+	if channel == "" {
+		channel = models.ChannelPublic
+	}
 	res, err := r.db.ExecContext(ctx,
-		`INSERT INTO conversations (user_id, public_id, title) VALUES (?, ?, ?)`,
-		userID, publicID, title,
+		`INSERT INTO conversations (user_id, public_id, title, channel) VALUES (?, ?, ?, ?)`,
+		userID, publicID, title, channel,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert conversation: %w", err)
@@ -81,13 +84,13 @@ func (r *ConversationRepo) ListByUser(ctx context.Context, userID int64, page, l
 
 	var total int
 	if err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM conversations WHERE user_id = ?`, userID,
+		`SELECT COUNT(*) FROM conversations WHERE user_id = ? AND COALESCE(NULLIF(channel, ''), 'public') = 'public'`, userID,
 	).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count conversations: %w", err)
 	}
 
 	rows, err := r.db.QueryContext(ctx, convoSelect+`
-		WHERE c.user_id = ?
+		WHERE c.user_id = ? AND COALESCE(NULLIF(c.channel, ''), 'public') = 'public'
 		ORDER BY c.id DESC
 		LIMIT ? OFFSET ?`,
 		userID, limit, offset,

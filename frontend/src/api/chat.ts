@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { ChatSource } from './types'
+import type { ChatSource, PublicBot } from './types'
 
 export type ChatEvent =
   | { type: 'sources'; sources: ChatSource[] }
@@ -46,17 +46,20 @@ function parseBlock(block: string): ChatEvent | null {
 }
 
 export async function streamChat(
+  slug: string,
   message: string,
   conversationId: string | null,
   onEvent: (ev: ChatEvent) => void,
   signal?: AbortSignal,
+  channel: 'public' | 'playground' = 'public',
 ) {
-  const res = await fetch('/api/v1/chat', {
+  const res = await fetch(`/api/v1/b/${encodeURIComponent(slug)}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       message,
       conversation_id: conversationId,
+      channel,
     }),
     signal,
   })
@@ -100,7 +103,8 @@ export async function streamChat(
 }
 
 export const botApi = {
-  public: () => api<import('./types').PublicBot>('/api/v1/bot'),
+  public: (slug: string) => api<PublicBot>(`/api/v1/bots/${encodeURIComponent(slug)}`),
+  demo: () => api<{ slug?: string; bot_name?: string; has_ready_kb: boolean; configured: boolean }>('/api/v1/demo'),
 }
 
 export const authPublicApi = {

@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+
+	"github.com/supernand/docubot/backend/internal/util"
 )
 
 // Migrate applies the DocuBot schema (BRD §8.2) idempotently, then additive columns.
@@ -77,6 +79,19 @@ CREATE TABLE IF NOT EXISTS settings (
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS bots (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id          INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    slug             TEXT NOT NULL UNIQUE,
+    name             TEXT NOT NULL DEFAULT 'DocuBot',
+    welcome_message  TEXT NOT NULL DEFAULT 'Halo! Ada yang bisa saya bantu?',
+    active           INTEGER NOT NULL DEFAULT 1,
+    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bots_slug ON bots(slug);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bots_user ON bots(user_id);
 `
 	if _, err := db.Exec(ddl); err != nil {
 		return fmt.Errorf("exec schema ddl: %w", err)
@@ -109,6 +124,14 @@ CREATE TABLE IF NOT EXISTS settings (
 		return fmt.Errorf("index conversations public_id: %w", err)
 	}
 
+	if err := addColumn(db, "conversations", "channel", "TEXT NOT NULL DEFAULT 'public'"); err != nil {
+		return err
+	}
+
+	if err := backfillBots(db); err != nil {
+		return err
+	}
+
 	// Interrupted ingest after a crash/restart would otherwise stay "processing" forever.
 	if _, err := db.Exec(`
 		UPDATE documents
@@ -132,4 +155,77 @@ func addColumn(db *sql.DB, table, column, decl string) error {
 		return nil
 	}
 	return fmt.Errorf("add column %s.%s: %w", table, column, err)
+}
+
+func backfillBots(db *sql.DB) error {
+	rows, err := db.Query(`
+		SELECT u.id, u.name,
+		       COALESCE(s.bot_name, ''),
+		       COALESCE(s.welcome_message, ''),
+		       COALESCE(s.bot_active, 1)
+		FROM users u
+		LEFT JOIN settings s ON s.user_id = u.id
+		WHERE NOT EXISTS (SELECT 1 FROM bots b WHERE b.user_id = u.id)
+		ORDER BY u.id ASC`)
+	if err != nil {
+		return fmt.Errorf("select users without bots: %w", err)
+	}
+	defer rows.Close()
+
+	type pending struct {
+		userID  int64
+		name    string
+		welcome string
+		active  int
+		seed    string
+	}
+	var list []pending
+	for rows.Next() {
+		var p pending
+		var userName, botName string
+		if err := rows.Scan(&p.userID, &userName, &botName, &p.welcome, &p.active); err != nil {
+			return fmt.Errorf("scan user for bot backfill: %w", err)
+		}
+		p.name = strings.TrimSpace(botName)
+		if p.name == "" {
+			p.name = strings.TrimSpace(userName)
+		}
+		if p.name == "" {
+			p.name = "DocuBot"
+		}
+		p.seed = strings.TrimSpace(botName)
+		if p.seed == "" {
+			p.seed = strings.TrimSpace(userName)
+		}
+		if p.seed == "" {
+			p.seed = "bot"
+		}
+		if strings.TrimSpace(p.welcome) == "" {
+			p.welcome = "Halo! Ada yang bisa saya bantu?"
+		}
+		list = append(list, p)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("users without bots rows: %w", err)
+	}
+
+	taken := func(slug string) bool {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM bots WHERE slug = ?`, slug).Scan(&n); err != nil {
+			return true
+		}
+		return n > 0
+	}
+
+	for _, p := range list {
+		slug := util.AllocateSlug(p.seed, p.userID, taken)
+		if _, err := db.Exec(`
+			INSERT INTO bots (user_id, slug, name, welcome_message, active)
+			VALUES (?, ?, ?, ?, ?)`,
+			p.userID, slug, p.name, p.welcome, p.active,
+		); err != nil {
+			return fmt.Errorf("backfill bot for user %d: %w", p.userID, err)
+		}
+	}
+	return nil
 }

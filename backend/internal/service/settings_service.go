@@ -11,71 +11,19 @@ import (
 	"github.com/supernand/docubot/backend/internal/repository"
 )
 
-// SettingsService loads and updates bot settings.
+// SettingsService loads and updates RAG knobs, joining identity from bots.
 type SettingsService struct {
-	users          repository.UserRepository
-	settings       repository.SettingsRepository
-	docs           repository.DocumentRepository
-	registerStatus func(context.Context) (open bool, mode string, err error)
+	settings repository.SettingsRepository
+	bots     repository.BotRepository
+	docs     repository.DocumentRepository
 }
 
 // NewSettingsService constructs a SettingsService.
-func NewSettingsService(users repository.UserRepository, settings repository.SettingsRepository, docs repository.DocumentRepository) *SettingsService {
-	return &SettingsService{users: users, settings: settings, docs: docs}
+func NewSettingsService(settings repository.SettingsRepository, bots repository.BotRepository, docs repository.DocumentRepository) *SettingsService {
+	return &SettingsService{settings: settings, bots: bots, docs: docs}
 }
 
-// SetRegisterStatus wires public register_open from AuthService.
-func (s *SettingsService) SetRegisterStatus(fn func(context.Context) (bool, string, error)) {
-	s.registerStatus = fn
-}
-
-// GetPublic returns the owner bot profile for the public chat page.
-func (s *SettingsService) GetPublic(ctx context.Context) (*models.PublicBot, error) {
-	registerOpen := false
-	if s.registerStatus != nil {
-		open, _, err := s.registerStatus(ctx)
-		if err != nil {
-			return nil, err
-		}
-		registerOpen = open
-	}
-
-	owner, err := s.users.First(ctx)
-	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return &models.PublicBot{
-				BotName:        "DocuBot",
-				WelcomeMessage: "Halo! Ada yang bisa saya bantu?",
-				BotActive:      false,
-				Configured:     false,
-				HasReadyKB:     false,
-				RegisterOpen:   registerOpen,
-			}, nil
-		}
-		return nil, err
-	}
-	cfg, err := s.settings.GetByUserID(ctx, owner.ID)
-	if err != nil {
-		return nil, err
-	}
-	ready := 0
-	if s.docs != nil {
-		ready, err = s.docs.CountReadyForUser(ctx, owner.ID)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return &models.PublicBot{
-		BotName:        cfg.BotName,
-		WelcomeMessage: cfg.WelcomeMessage,
-		BotActive:      cfg.BotActive,
-		Configured:     true,
-		HasReadyKB:     ready > 0,
-		RegisterOpen:   registerOpen,
-	}, nil
-}
-
-// Get returns admin settings for userID.
+// Get returns admin settings for userID: RAG knobs from settings, identity from bots.
 func (s *SettingsService) Get(ctx context.Context, userID int64) (*models.Settings, error) {
 	cfg, err := s.settings.GetByUserID(ctx, userID)
 	if err != nil {
@@ -83,6 +31,15 @@ func (s *SettingsService) Get(ctx context.Context, userID int64) (*models.Settin
 			return nil, ErrNotFound
 		}
 		return nil, err
+	}
+	bot, err := s.bots.GetByUserID(ctx, userID)
+	if err != nil && !errors.Is(err, repository.ErrNotFound) {
+		return nil, err
+	}
+	if bot != nil {
+		cfg.BotName = bot.Name
+		cfg.WelcomeMessage = bot.WelcomeMessage
+		cfg.BotActive = bot.Active
 	}
 	return cfg, nil
 }
@@ -98,7 +55,7 @@ type UpdateInput struct {
 	MinScore       float64
 }
 
-// Update validates and saves settings.
+// Update validates, writes RAG knobs to settings, and dual-writes identity to bots + settings.
 func (s *SettingsService) Update(ctx context.Context, userID int64, in UpdateInput) (*models.Settings, error) {
 	name := strings.TrimSpace(in.BotName)
 	if name == "" {
@@ -144,5 +101,19 @@ func (s *SettingsService) Update(ctx context.Context, userID int64, in UpdateInp
 	if err := s.settings.Update(ctx, cur); err != nil {
 		return nil, err
 	}
-	return s.settings.GetByUserID(ctx, userID)
+
+	bot, err := s.bots.GetByUserID(ctx, userID)
+	if err != nil && !errors.Is(err, repository.ErrNotFound) {
+		return nil, err
+	}
+	if bot != nil {
+		bot.Name = name
+		bot.WelcomeMessage = welcome
+		bot.Active = in.BotActive
+		if err := s.bots.Update(ctx, bot); err != nil {
+			return nil, err
+		}
+	}
+
+	return s.Get(ctx, userID)
 }

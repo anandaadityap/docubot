@@ -5,12 +5,21 @@ export type User = {
 }
 
 export type PublicBot = {
+  slug: string
   bot_name: string
   welcome_message: string
   bot_active: boolean
   configured: boolean
   has_ready_kb: boolean
-  register_open: boolean
+}
+
+export type AdminBot = {
+  slug: string
+  name: string
+  welcome_message: string
+  active: boolean
+  public_path: string
+  embed_path: string
 }
 
 export type ChatSource = {

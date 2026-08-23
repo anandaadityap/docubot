@@ -7,6 +7,7 @@ type Conversation struct {
 	ID           int64     `json:"id"`
 	PublicID     string    `json:"public_id,omitempty"`
 	UserID       int64     `json:"-"`
+	Channel      string    `json:"-"`
 	Title        string    `json:"title"`
 	MessageCount int       `json:"message_count,omitempty"`
 	CreatedAt    time.Time `json:"created_at,omitempty"`

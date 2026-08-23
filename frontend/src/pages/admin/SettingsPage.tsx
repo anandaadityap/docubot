@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { settingsApi } from '../../api/admin'
 import { HttpError } from '../../api/client'
 import type { Settings } from '../../api/types'
@@ -47,7 +48,13 @@ export function SettingsPage() {
   return (
     <div className="max-w-xl">
       <h1 className="text-xl font-semibold text-ink">Setelan</h1>
-      <p className="mb-6 text-sm text-muted">Nama bot, welcome message, dan parameter RAG.</p>
+      <p className="mb-6 text-sm text-muted">
+        Nama bot, welcome message, dan parameter RAG. Slug dan tautan pasang ada di halaman{' '}
+        <Link to="/admin/install" className="text-brand hover:underline">
+          Pasang
+        </Link>
+        .
+      </p>
       <form className="space-y-4 rounded-xl border border-slate-200 bg-white p-6" onSubmit={onSubmit}>
         <div>
           <Label>Nama bot</Label>

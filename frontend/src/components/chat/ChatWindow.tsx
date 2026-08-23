@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { botApi, streamChat } from '../../api/chat'
+import { HttpError } from '../../api/client'
 import type { ChatSource, PublicBot } from '../../api/types'
 import { Button } from '../ui/Button'
 import { MessageBubble, TypingIndicator } from './MessageBubble'
@@ -14,7 +14,6 @@ type UIMessage = {
   truncated?: boolean
 }
 
-const SESSION_KEY = 'docubot_public_chat'
 const SSE_TIMEOUT_MS = 60_000
 
 type StoredChat = {
@@ -22,9 +21,20 @@ type StoredChat = {
   messages: UIMessage[]
 }
 
-function loadSession(): StoredChat {
+export type ChatWindowProps = {
+  slug: string
+  variant?: 'page' | 'embed'
+  channel?: 'public' | 'playground'
+}
+
+function sessionKey(slug: string, channel: string) {
+  if (channel === 'playground') return `docubot_playground_chat:${slug}`
+  return `docubot_public_chat:${slug}`
+}
+
+function loadSession(key: string): StoredChat {
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY)
+    const raw = sessionStorage.getItem(key)
     if (!raw) return { conversationId: null, messages: [] }
     const parsed = JSON.parse(raw) as StoredChat
     return {
@@ -36,17 +46,19 @@ function loadSession(): StoredChat {
   }
 }
 
-function saveSession(conversationId: string | null, messages: UIMessage[]) {
+function saveSession(key: string, conversationId: string | null, messages: UIMessage[]) {
   const payload: StoredChat = {
     conversationId,
     messages: messages.map((m) => ({ ...m, streaming: false })),
   }
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(payload))
+  sessionStorage.setItem(key, JSON.stringify(payload))
 }
 
-export function ChatWindow() {
-  const initial = loadSession()
+export function ChatWindow({ slug, variant = 'page', channel = 'public' }: ChatWindowProps) {
+  const key = sessionKey(slug, channel)
+  const initial = loadSession(key)
   const [bot, setBot] = useState<PublicBot | null>(null)
+  const [notFound, setNotFound] = useState(false)
   const [messages, setMessages] = useState<UIMessage[]>(initial.messages)
   const [input, setInput] = useState('')
   const [conversationId, setConversationId] = useState<string | null>(initial.conversationId)
@@ -57,32 +69,41 @@ export function ChatWindow() {
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     botApi
-      .public()
-      .then(setBot)
-      .catch(() =>
-        setBot({
-          bot_name: 'DocuBot',
-          welcome_message: 'Halo! Ada yang bisa saya bantu?',
-          bot_active: false,
-          configured: false,
-          has_ready_kb: false,
-          register_open: true,
-        }),
-      )
-  }, [])
+      .public(slug)
+      .then((b) => {
+        if (!cancelled) {
+          setBot(b)
+          setNotFound(false)
+        }
+      })
+      .catch((e) => {
+        if (cancelled) return
+        if (e instanceof HttpError && e.status === 404) {
+          setNotFound(true)
+          setBot(null)
+          return
+        }
+        setNotFound(false)
+        setBot(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [slug])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, busy])
 
   useEffect(() => {
-    saveSession(conversationId, messages)
-  }, [conversationId, messages])
+    saveSession(key, conversationId, messages)
+  }, [key, conversationId, messages])
 
   function newChat() {
     abortRef.current?.abort()
-    sessionStorage.removeItem(SESSION_KEY)
+    sessionStorage.removeItem(key)
     setConversationId(null)
     setMessages([])
     setError('')
@@ -108,6 +129,7 @@ export function ChatWindow() {
     let sawDone = false
     try {
       await streamChat(
+        slug,
         text,
         conversationId,
         (ev) => {
@@ -132,6 +154,7 @@ export function ChatWindow() {
           }
         },
         ac.signal,
+        channel,
       )
       if (!sawDone && !ac.signal.aborted) {
         setRetryText(text)
@@ -157,6 +180,15 @@ export function ChatWindow() {
     }
   }
 
+  if (notFound) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center bg-surface px-6 text-center">
+        <p className="text-lg font-semibold text-ink">Bot tidak ditemukan</p>
+        <p className="mt-2 max-w-sm text-sm text-muted">Slug ini tidak terdaftar. Cek tautan pasang di halaman admin, atau buka landing DocuBot.</p>
+      </div>
+    )
+  }
+
   const name = bot?.bot_name || 'DocuBot'
   const welcome = bot?.welcome_message || 'Halo! Ada yang bisa saya bantu?'
   const botOff = Boolean(bot && (!bot.configured || !bot.bot_active))
@@ -176,10 +208,13 @@ export function ChatWindow() {
       ? 'Bot sedang tidak aktif'
       : 'Bot belum dikonfigurasi'
     : 'Ketik pertanyaan...'
+  const compact = variant === 'embed'
 
   return (
     <div className="flex h-full flex-col bg-surface">
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+      <header
+        className={`flex shrink-0 items-center justify-between border-b border-slate-200 bg-white ${compact ? 'px-3 py-2' : 'px-4 py-3'}`}
+      >
         <div className="flex items-center gap-2">
           <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-sm font-semibold text-white">
             {name.slice(0, 1).toUpperCase()}
@@ -189,35 +224,17 @@ export function ChatWindow() {
             <p className="text-[11px] text-muted">{statusLabel}</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <button type="button" className="text-xs text-muted hover:text-brand" onClick={newChat}>
-            Chat baru
-          </button>
-          <Link to="/login" className="text-xs text-muted hover:text-brand">
-            Admin Login
-          </Link>
-        </div>
+        <button type="button" className="text-xs text-muted hover:text-brand" onClick={newChat}>
+          Chat baru
+        </button>
       </header>
 
-      <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-4 py-6">
+      <div className={`mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col ${compact ? 'px-3 py-3' : 'px-4 py-6'}`}>
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
           <MessageBubble role="bot" content={welcome} />
-          {!bot?.configured && (
-            <p className="text-center text-xs text-muted">
-              Belum ada admin.{' '}
-              {bot?.register_open !== false ? (
-                <Link to="/register" className="text-brand hover:underline">
-                  Daftar
-                </Link>
-              ) : (
-                'Pendaftaran sudah ditutup.'
-              )}{' '}
-              lalu unggah dokumen knowledge base.
-            </p>
-          )}
           {kbEmpty && (
             <p className="text-center text-xs text-amber-700">
-              Belum ada dokumen Ready. Admin perlu mengunggah `.md` / `.txt` dulu. Pertanyaan tetap bisa dikirim; bot akan
+              Belum ada dokumen Ready. Pengelola perlu mengunggah `.md` / `.txt` dulu. Pertanyaan tetap bisa dikirim; bot akan
               menjawab jujur bahwa knowledge base kosong.
             </p>
           )}
@@ -236,7 +253,7 @@ export function ChatWindow() {
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3">
+      <div className={`shrink-0 border-t border-slate-200 bg-white ${compact ? 'px-3 py-2' : 'px-4 py-3'}`}>
         <form
           className="mx-auto flex max-w-2xl gap-2"
           onSubmit={(e) => {

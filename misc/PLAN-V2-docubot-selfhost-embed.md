@@ -3,9 +3,9 @@
 | Field | Value |
 |---|---|
 | **Tipe dokumen** | Catatan perkembangan setelah MVP + rencana implementasi V2 |
-| **Versi** | 1.0 |
+| **Versi** | 1.1 |
 | **Tanggal** | 23 Agustus 2026 |
-| **Status** | Siap dikerjakan — belum diimplementasi di kode |
+| **Status** | Implemented di kode (lihat §3.2; rekaman demo masih opsional) |
 | **Produk** | DocuBot (Go + React + SQLite + RAG) |
 
 ---
@@ -103,17 +103,17 @@ Bentuk yang dipilih: **aplikasi OSS yang di-self-host** (clone / `docker compose
 
 ### 3.2 Definition of Done — V2 selesai jika semua ini benar
 
-- [ ] `POST /api/v1/b/:slug/chat` menolak slug yang tidak ada (bukan fallback ke user #1).
-- [ ] `GET /api/v1/bots/:slug` mengembalikan profil bot itu, termasuk `has_ready_kb`.
-- [ ] Tidak ada path produksi yang memanggil `users.First()` untuk menjawab chat. (Pengecualian sadar: `GET /api/v1/demo` boleh menunjuk bot tertua untuk tombol “Coba demo” di landing — lihat §8.3.)
-- [ ] `/` adalah landing, bukan `ChatWindow` penuh.
-- [ ] `/b/:slug` chat tanpa tautan Admin Login.
-- [ ] Admin `/admin/install` menampilkan URL publik + snippet iframe siap salin.
-- [ ] File HTML dummy (boleh `misc/example/embed-dummy.html`) memuat iframe itu dan chat memakai knowledge base bot tersebut.
-- [ ] Register membuat baris `bots` dalam transaksi yang sama dengan `users` + `settings`.
-- [ ] DB lama (user tanpa bot) di-backfill saat migrate.
-- [ ] `go test ./...` hijau; tes baru di §14 lulus.
-- [ ] `LICENSE` MIT; README menjelaskan self-host + embed.
+- [x] `POST /api/v1/b/:slug/chat` menolak slug yang tidak ada (bukan fallback ke user #1).
+- [x] `GET /api/v1/bots/:slug` mengembalikan profil bot itu, termasuk `has_ready_kb`.
+- [x] Tidak ada path produksi yang memanggil `users.First()` untuk menjawab chat. (Pengecualian sadar: `GET /api/v1/demo` boleh menunjuk bot tertua untuk tombol “Coba demo” di landing — lihat §8.3.)
+- [x] `/` adalah landing, bukan `ChatWindow` penuh.
+- [x] `/b/:slug` chat tanpa tautan Admin Login.
+- [x] Admin `/admin/install` menampilkan URL publik + snippet iframe siap salin.
+- [x] File HTML dummy (boleh `misc/example/embed-dummy.html`) memuat iframe itu dan chat memakai knowledge base bot tersebut.
+- [x] Register membuat baris `bots` dalam transaksi yang sama dengan `users` + `settings`.
+- [x] DB lama (user tanpa bot) di-backfill saat migrate.
+- [x] `go test ./...` hijau; tes baru di §14 lulus.
+- [x] `LICENSE` MIT; README menjelaskan self-host + embed.
 - [ ] Satu rekaman/screenshot alur: daftar → unggah FAQ → tes → salin snippet → chat dari HTML dummy.
 
 ### 3.3 Di luar DoD V2 (boleh jelek / belum ada)
@@ -673,6 +673,7 @@ Jangan masuk backlog sprint V2.
 | Versi | Tanggal | Isi |
 |---|---|---|
 | 1.0 | 23 Agu 2026 | Perkembangan pasca-MVP + plan implementasi V2 (self-host, slug, landing, iframe). Acuan: BRD v1.2, STATUS-GAPS v1.1. Kode belum diubah. |
+| 1.1 | 23 Agu 2026 | Implemented: tabel `bots`, chat `/b/:slug`, landing, Pasang + iframe, LICENSE MIT. DoD §3.2 dicentang kecuali rekaman demo. |
 
 Setelah implementasi merge: naikkan ke **1.1**, centang §3.2, catat commit/hash singkat.
 

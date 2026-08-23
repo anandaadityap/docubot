@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { Conversation, ChatMessage, Document, Overview, Settings, TopQuestion, User } from './types'
+import type { AdminBot, Conversation, ChatMessage, Document, Overview, Settings, TopQuestion, User } from './types'
 
 export const authApi = {
   register: (name: string, email: string, password: string, invite?: string) =>
@@ -41,4 +41,10 @@ export const conversationsApi = {
 export const analyticsApi = {
   overview: () => api<Overview>('/api/v1/analytics/overview'),
   topQuestions: (limit = 10) => api<TopQuestion[]>(`/api/v1/analytics/top-questions?limit=${limit}`),
+}
+
+export const adminBotApi = {
+  get: () => api<AdminBot>('/api/v1/admin/bot'),
+  put: (body: { slug: string; name: string; welcome_message: string; active: boolean }) =>
+    api<AdminBot>('/api/v1/admin/bot', { method: 'PUT', body: JSON.stringify(body) }),
 }

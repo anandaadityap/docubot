@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { documentsApi } from '../../api/admin'
 import { HttpError } from '../../api/client'
 import type { Document } from '../../api/types'
@@ -123,10 +124,10 @@ export function DocumentsPage() {
             <li>Tunggu status menjadi <span className="font-medium text-ink">Ready</span>.</li>
             <li>
               Buka{' '}
-              <a href="/" className="text-brand hover:underline" target="_blank" rel="noreferrer">
-                halaman chat publik
-              </a>{' '}
-              dan coba tanya.
+              <Link to="/admin/install" className="text-brand hover:underline">
+                Pasang
+              </Link>{' '}
+              untuk tes dan salin snippet iframe.
             </li>
           </ol>
           <p className="mt-4 text-sm text-muted">

@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button'
 
 const links = [
   { to: '/admin/documents', label: 'Dokumen' },
+  { to: '/admin/install', label: 'Pasang' },
   { to: '/admin/conversations', label: 'Percakapan' },
   { to: '/admin/analytics', label: 'Analitik' },
   { to: '/admin/settings', label: 'Setelan' },

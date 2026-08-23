@@ -43,7 +43,7 @@ type ChatEmitter interface {
 
 // ChatService orchestrates retrieval + LLM streaming + persistence.
 type ChatService struct {
-	users    repository.UserRepository
+	bots     repository.BotRepository
 	docs     repository.DocumentRepository
 	chunks   repository.ChunkRepository
 	convos   repository.ConversationRepository
@@ -55,7 +55,7 @@ type ChatService struct {
 
 // NewChatService constructs a ChatService.
 func NewChatService(
-	users repository.UserRepository,
+	bots repository.BotRepository,
 	docs repository.DocumentRepository,
 	chunks repository.ChunkRepository,
 	convos repository.ConversationRepository,
@@ -65,7 +65,7 @@ func NewChatService(
 	llm ai.LLMProvider,
 ) *ChatService {
 	return &ChatService{
-		users:    users,
+		bots:     bots,
 		docs:     docs,
 		chunks:   chunks,
 		convos:   convos,
@@ -76,10 +76,24 @@ func NewChatService(
 	}
 }
 
-// ChatInput is a public chat turn.
+// ChatInput is a public chat turn. Slug is required; Channel defaults to public.
 type ChatInput struct {
+	Slug           string
 	Message        string
 	ConversationID *string
+	Channel        string
+}
+
+// LookupSlug resolves a bot by slug without answering a question.
+func (s *ChatService) LookupSlug(ctx context.Context, slug string) (*models.Bot, error) {
+	bot, err := s.bots.GetBySlug(ctx, strings.TrimSpace(slug))
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrBotNotFound
+		}
+		return nil, fmt.Errorf("lookup bot: %w", err)
+	}
+	return bot, nil
 }
 
 // Chat runs one RAG turn and streams via emit.
@@ -92,22 +106,32 @@ func (s *ChatService) Chat(ctx context.Context, in ChatInput, emit ChatEmitter) 
 		return fmt.Errorf("%w: message is too long (max %d characters)", ErrValidation, maxChatMessageLen)
 	}
 
-	owner, err := s.users.First(ctx)
-	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return ErrNotConfigured
-		}
-		return fmt.Errorf("resolve owner: %w", err)
+	channel := strings.TrimSpace(in.Channel)
+	if channel == "" {
+		channel = models.ChannelPublic
+	}
+	if channel != models.ChannelPublic && channel != models.ChannelPlayground {
+		return fmt.Errorf("%w: channel must be public or playground", ErrValidation)
 	}
 
-	cfg, err := s.settings.GetByUserID(ctx, owner.ID)
+	slug := strings.TrimSpace(in.Slug)
+	if slug == "" {
+		return ErrBotNotFound
+	}
+
+	bot, err := s.LookupSlug(ctx, slug)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := s.settings.GetByUserID(ctx, bot.UserID)
 	if err != nil {
 		return fmt.Errorf("load settings: %w", err)
 	}
 
 	started := time.Now()
 
-	convo, err := s.resolveConversation(ctx, owner.ID, in.ConversationID, msg)
+	convo, err := s.resolveConversation(ctx, bot.UserID, in.ConversationID, msg, channel)
 	if err != nil {
 		return err
 	}
@@ -117,11 +141,11 @@ func (s *ChatService) Chat(ctx context.Context, in ChatInput, emit ChatEmitter) 
 		return err
 	}
 
-	if !cfg.BotActive {
+	if !bot.Active {
 		return s.finishLocal(ctx, convo, emit, started, msg, inactiveMessage, nil, true)
 	}
 
-	ready, err := s.docs.CountReadyForUser(ctx, owner.ID)
+	ready, err := s.docs.CountReadyForUser(ctx, bot.UserID)
 	if err != nil {
 		return fmt.Errorf("count ready documents: %w", err)
 	}
@@ -129,7 +153,7 @@ func (s *ChatService) Chat(ctx context.Context, in ChatInput, emit ChatEmitter) 
 		return s.finishLocal(ctx, convo, emit, started, msg, emptyKBMessage, nil, false)
 	}
 
-	sources, hits, mismatch, err := s.retrieve(ctx, owner.ID, cfg, retrievalQuery(msg, history))
+	sources, hits, mismatch, err := s.retrieve(ctx, bot.UserID, cfg, retrievalQuery(msg, history))
 	if err != nil {
 		return err
 	}
@@ -231,7 +255,7 @@ func (s *ChatService) persistTurn(ctx context.Context, conversationID int64, use
 	return saved, nil
 }
 
-func (s *ChatService) resolveConversation(ctx context.Context, userID int64, publicID *string, firstMessage string) (*models.Conversation, error) {
+func (s *ChatService) resolveConversation(ctx context.Context, userID int64, publicID *string, firstMessage, channel string) (*models.Conversation, error) {
 	if publicID != nil {
 		id := strings.TrimSpace(*publicID)
 		if id != "" {
@@ -246,7 +270,7 @@ func (s *ChatService) resolveConversation(ctx context.Context, userID int64, pub
 		}
 	}
 	title := truncateRunes(firstMessage, titleMaxRunes)
-	c, err := s.convos.Create(ctx, userID, title)
+	c, err := s.convos.Create(ctx, userID, title, channel)
 	if err != nil {
 		return nil, fmt.Errorf("create conversation: %w", err)
 	}

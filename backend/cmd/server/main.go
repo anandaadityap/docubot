@@ -31,6 +31,7 @@ func main() {
 	defer db.Close()
 
 	userRepo := repository.NewUserRepo(db)
+	botRepo := repository.NewBotRepo(db)
 	authSvc := service.NewAuthServiceWithPolicy(userRepo, cfg.JWTSecret, cfg.RegisterMode, cfg.RegisterInvite)
 	authH := handler.NewAuthHandler(authSvc)
 
@@ -59,11 +60,13 @@ func main() {
 	docSvc := service.NewDocumentService(docRepo, chunkRepo, embedder, cfg.UploadDir)
 	docH := handler.NewDocumentHandler(docSvc)
 
-	chatSvc := service.NewChatService(userRepo, docRepo, chunkRepo, convoRepo, msgRepo, settingsRepo, embedder, llm)
+	chatSvc := service.NewChatService(botRepo, docRepo, chunkRepo, convoRepo, msgRepo, settingsRepo, embedder, llm)
 	chatH := handler.NewChatHandler(chatSvc)
 
-	settingsSvc := service.NewSettingsService(userRepo, settingsRepo, docRepo)
-	settingsSvc.SetRegisterStatus(authSvc.RegisterStatus)
+	botSvc := service.NewBotService(botRepo, settingsRepo, docRepo)
+	botH := handler.NewBotHandler(botSvc)
+
+	settingsSvc := service.NewSettingsService(settingsRepo, botRepo, docRepo)
 	settingsH := handler.NewSettingsHandler(settingsSvc)
 
 	convoSvc := service.NewConversationService(convoRepo, msgRepo)
@@ -86,8 +89,11 @@ func main() {
 		v1.GET("/auth/register-status", authH.RegisterStatus)
 		v1.POST("/auth/register", middleware.IPRateLimit(authLimiter), authH.Register)
 		v1.POST("/auth/login", middleware.IPRateLimit(authLimiter), authH.Login)
-		v1.GET("/bot", settingsH.PublicBot)
-		v1.POST("/chat", middleware.ChatRateLimit(chatLimiter), chatH.Chat)
+		v1.GET("/bots/:slug", botH.Public)
+		v1.GET("/demo", botH.Demo)
+		v1.POST("/b/:slug/chat", middleware.ChatRateLimit(chatLimiter), chatH.Chat)
+		v1.GET("/bot", settingsH.LegacyGone)
+		v1.POST("/chat", chatH.LegacyGone)
 
 		authed := v1.Group("")
 		authed.Use(middleware.AuthWithParser(authSvc))
@@ -107,6 +113,8 @@ func main() {
 
 		authed.GET("/settings", settingsH.Get)
 		authed.PUT("/settings", settingsH.Put)
+		authed.GET("/admin/bot", botH.AdminGet)
+		authed.PUT("/admin/bot", botH.AdminPut)
 	}
 
 	addr := ":" + cfg.Port

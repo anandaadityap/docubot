@@ -3,14 +3,23 @@
 param(
   [string]$BaseUrl = "http://127.0.0.1:8080",
   [string]$Message = "Gimana cara reset password?",
+  [string]$Slug = "",
   [double]$OutPerMillion = 1.10
 )
 
 $health = Invoke-RestMethod -Uri "$BaseUrl/healthz"
 Write-Host "== health ==" $health
 
+if ([string]::IsNullOrWhiteSpace($Slug)) {
+  $demo = Invoke-RestMethod -Uri "$BaseUrl/api/v1/demo"
+  $Slug = $demo.data.slug
+}
+if ([string]::IsNullOrWhiteSpace($Slug)) {
+  throw "no slug: pass -Slug or register a bot first (GET /api/v1/demo)"
+}
+
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
-$req = [System.Net.HttpWebRequest]::Create("$BaseUrl/api/v1/chat")
+$req = [System.Net.HttpWebRequest]::Create("$BaseUrl/api/v1/b/$Slug/chat")
 $req.Method = "POST"
 $req.ContentType = "application/json"
 $req.Timeout = 90000

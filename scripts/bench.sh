@@ -8,8 +8,13 @@ MSG="${MSG:-Gimana cara reset password?}"
 IN_PER_M="${IN_PER_M:-0.27}"
 OUT_PER_M="${OUT_PER_M:-1.10}"
 
-if ! command -v curl >/dev/null; then
-  echo "curl is required" >&2
+SLUG="${SLUG:-}"
+if [[ -z "$SLUG" ]]; then
+  demo="$(curl -fsS "$BASE_URL/api/v1/demo" || true)"
+  SLUG="$(printf '%s' "$demo" | sed -n 's/.*"slug":"\([^"]*\)".*/\1/p')"
+fi
+if [[ -z "$SLUG" ]]; then
+  echo "no slug: set SLUG=... or register a bot first (GET /api/v1/demo)" >&2
   exit 1
 fi
 
@@ -27,7 +32,7 @@ while IFS= read -r line; do
   if [[ -z "$first_ns" && "$line" == event:\ token ]]; then
     first_ns=$(date +%s%N)
   fi
-done < <(curl -sN -H "Content-Type: application/json" -d "{\"message\":\"$MSG\"}" "$BASE_URL/api/v1/chat" || true)
+done < <(curl -sN -H "Content-Type: application/json" -d "{\"message\":\"$MSG\"}" "$BASE_URL/api/v1/b/$SLUG/chat" || true)
 
 end_ns=$(date +%s%N)
 total_ms=$(( (end_ns - start_ns) / 1000000 ))

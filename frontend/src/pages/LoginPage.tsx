@@ -23,7 +23,7 @@ export function LoginPage() {
   }, [])
 
   if (getToken()) {
-    return <Navigate to="/admin/documents" replace />
+    return <Navigate to="/admin/install" replace />
   }
 
   async function onSubmit(e: FormEvent) {
@@ -33,7 +33,7 @@ export function LoginPage() {
     try {
       const res = await authApi.login(email, password)
       setToken(res.token)
-      nav('/admin/documents', { replace: true })
+      nav('/admin/install', { replace: true })
     } catch (err) {
       setError(err instanceof HttpError ? err.message : 'login gagal')
     } finally {
@@ -88,7 +88,7 @@ export function RegisterPage() {
   }, [invite])
 
   if (getToken()) {
-    return <Navigate to="/admin/documents" replace />
+    return <Navigate to="/admin/install" replace />
   }
 
   async function onSubmit(e: FormEvent) {
@@ -99,7 +99,7 @@ export function RegisterPage() {
       await authApi.register(name, email, password, invite || undefined)
       const res = await authApi.login(email, password)
       setToken(res.token)
-      nav('/admin/documents', { replace: true })
+      nav('/admin/install', { replace: true })
     } catch (err) {
       setError(err instanceof HttpError ? err.message : 'registrasi gagal')
     } finally {

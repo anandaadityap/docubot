@@ -118,7 +118,7 @@ PDF, widget embed, multi-tenant, channel chat, dark mode, i18n — lihat BRD §1
 | Prompt | `backend/internal/ai/prompt.go` |
 | SSE | `backend/internal/handler/chat_handler.go`, `frontend/src/api/chat.ts` |
 | UI chat | `frontend/src/components/chat/ChatWindow.tsx`, `MessageBubble.tsx` |
-| Owner bot publik | `user_repo.First`, `settings_service.GetPublic` |
+| Owner bot publik | `bots` + slug (`bot_repo`, `GET /api/v1/bots/:slug`); chat `POST /api/v1/b/:slug/chat` |
 | Register lock | `auth_service.go`, `REGISTER_MODE` |
 | Ingest | `document_handler.startProcess` (timeout + lock) |
 | Skema | `backend/internal/database/migrate.go` — kolom `public_id`, `embed_model`, `embed_dim` (migrasi sadar vs BRD §8) |

@@ -39,21 +39,21 @@ func NewAnalyticsRepo(db *sql.DB) *AnalyticsRepo {
 func (r *AnalyticsRepo) Overview(ctx context.Context, userID int64, since time.Time) (int, int, int, float64, int, []DailyStat, error) {
 	var totalConv, totalMsg, totalBot int
 	if err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM conversations WHERE user_id = ?`, userID,
+		`SELECT COUNT(*) FROM conversations WHERE user_id = ? AND COALESCE(NULLIF(channel, ''), 'public') = 'public'`, userID,
 	).Scan(&totalConv); err != nil {
 		return 0, 0, 0, 0, 0, nil, fmt.Errorf("count conversations: %w", err)
 	}
 	if err := r.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM messages m
 		INNER JOIN conversations c ON c.id = m.conversation_id
-		WHERE c.user_id = ?`, userID,
+		WHERE c.user_id = ? AND COALESCE(NULLIF(c.channel, ''), 'public') = 'public'`, userID,
 	).Scan(&totalMsg); err != nil {
 		return 0, 0, 0, 0, 0, nil, fmt.Errorf("count messages: %w", err)
 	}
 	if err := r.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM messages m
 		INNER JOIN conversations c ON c.id = m.conversation_id
-		WHERE c.user_id = ? AND m.role = 'bot'`, userID,
+		WHERE c.user_id = ? AND COALESCE(NULLIF(c.channel, ''), 'public') = 'public' AND m.role = 'bot'`, userID,
 	).Scan(&totalBot); err != nil {
 		return 0, 0, 0, 0, 0, nil, fmt.Errorf("count bot messages: %w", err)
 	}
@@ -62,7 +62,7 @@ func (r *AnalyticsRepo) Overview(ctx context.Context, userID int64, since time.T
 	if err := r.db.QueryRowContext(ctx, `
 		SELECT AVG(m.latency_ms) FROM messages m
 		INNER JOIN conversations c ON c.id = m.conversation_id
-		WHERE c.user_id = ? AND m.role = 'bot' AND m.latency_ms IS NOT NULL`, userID,
+		WHERE c.user_id = ? AND COALESCE(NULLIF(c.channel, ''), 'public') = 'public' AND m.role = 'bot' AND m.latency_ms IS NOT NULL`, userID,
 	).Scan(&avg); err != nil {
 		return 0, 0, 0, 0, 0, nil, fmt.Errorf("avg latency: %w", err)
 	}
@@ -71,7 +71,7 @@ func (r *AnalyticsRepo) Overview(ctx context.Context, userID int64, since time.T
 	if err := r.db.QueryRowContext(ctx, `
 		SELECT COALESCE(SUM(m.token_usage), 0) FROM messages m
 		INNER JOIN conversations c ON c.id = m.conversation_id
-		WHERE c.user_id = ? AND m.role = 'bot'`, userID,
+		WHERE c.user_id = ? AND COALESCE(NULLIF(c.channel, ''), 'public') = 'public' AND m.role = 'bot'`, userID,
 	).Scan(&totalTokens); err != nil {
 		return 0, 0, 0, 0, 0, nil, fmt.Errorf("sum tokens: %w", err)
 	}
@@ -79,7 +79,7 @@ func (r *AnalyticsRepo) Overview(ctx context.Context, userID int64, since time.T
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT date(created_at) AS d, COUNT(*)
 		FROM conversations
-		WHERE user_id = ? AND created_at >= ?
+		WHERE user_id = ? AND COALESCE(NULLIF(channel, ''), 'public') = 'public' AND created_at >= ?
 		GROUP BY d
 		ORDER BY d ASC`,
 		userID, since.UTC().Format("2006-01-02"),
@@ -124,7 +124,7 @@ func (r *AnalyticsRepo) TopQuestions(ctx context.Context, userID int64, limit in
 		SELECT MIN(m.content) AS question, COUNT(*) AS cnt
 		FROM messages m
 		INNER JOIN conversations c ON c.id = m.conversation_id
-		WHERE c.user_id = ? AND m.role = 'user'
+		WHERE c.user_id = ? AND COALESCE(NULLIF(c.channel, ''), 'public') = 'public' AND m.role = 'user'
 		GROUP BY LOWER(TRIM(m.content))
 		ORDER BY cnt DESC
 		LIMIT ?`,

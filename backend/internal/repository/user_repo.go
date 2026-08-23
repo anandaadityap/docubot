@@ -57,6 +57,11 @@ func (r *UserRepo) Create(ctx context.Context, email, passwordHash, name string)
 		return nil, fmt.Errorf("insert settings: %w", err)
 	}
 
+	botName := strings.TrimSpace(name)
+	if err := insertBotTx(ctx, tx, id, name, botName, "", true); err != nil {
+		return nil, err
+	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)
 	}

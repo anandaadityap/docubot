@@ -32,7 +32,7 @@ func (e *capturingEmitter) Done(cid string, mid int64, _ int, _ int64) error {
 	return nil
 }
 
-func newChatStack(t *testing.T, llm ai.LLMProvider) (*service.ChatService, *service.DocumentService, *service.SettingsService, int64) {
+func newChatStack(t *testing.T, llm ai.LLMProvider) (*service.ChatService, *service.DocumentService, *service.SettingsService, int64, string) {
 	t.Helper()
 	dir := t.TempDir()
 	uploadDir := filepath.Join(dir, "uploads")
@@ -44,15 +44,20 @@ func newChatStack(t *testing.T, llm ai.LLMProvider) (*service.ChatService, *serv
 
 	embedder := ai.NewStubEmbedder()
 	users := repository.NewUserRepo(db)
+	bots := repository.NewBotRepo(db)
 	auth := service.NewAuthService(users, "test-secret")
 	u, err := auth.Register(context.Background(), "Admin", "admin@example.com", "secret123")
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
+	bot, err := bots.GetByUserID(context.Background(), u.ID)
+	if err != nil {
+		t.Fatalf("bot: %v", err)
+	}
 
 	docs := service.NewDocumentService(repository.NewDocumentRepo(db), repository.NewChunkRepo(db), embedder, uploadDir)
 	chat := service.NewChatService(
-		users,
+		bots,
 		repository.NewDocumentRepo(db),
 		repository.NewChunkRepo(db),
 		repository.NewConversationRepo(db),
@@ -61,8 +66,8 @@ func newChatStack(t *testing.T, llm ai.LLMProvider) (*service.ChatService, *serv
 		embedder,
 		llm,
 	)
-	settings := service.NewSettingsService(users, repository.NewSettingsRepo(db), repository.NewDocumentRepo(db))
-	return chat, docs, settings, u.ID
+	settings := service.NewSettingsService(repository.NewSettingsRepo(db), bots, repository.NewDocumentRepo(db))
+	return chat, docs, settings, u.ID, bot.Slug
 }
 
 func uploadReady(t *testing.T, docs *service.DocumentService, userID int64) {
@@ -81,15 +86,15 @@ func uploadReady(t *testing.T, docs *service.DocumentService, userID int64) {
 }
 
 func TestChat_EmptyMessage(t *testing.T) {
-	chat, _, _, _ := newChatStack(t, &ai.StubLLM{})
-	err := chat.Chat(context.Background(), service.ChatInput{Message: "  "}, &capturingEmitter{})
+	chat, _, _, _, slug := newChatStack(t, &ai.StubLLM{})
+	err := chat.Chat(context.Background(), service.ChatInput{Slug: slug, Message: "  "}, &capturingEmitter{})
 	if err == nil || !strings.Contains(err.Error(), "required") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestChat_BotInactive(t *testing.T) {
-	chat, docs, settings, userID := newChatStack(t, &ai.StubLLM{})
+	chat, docs, settings, userID, slug := newChatStack(t, &ai.StubLLM{})
 	uploadReady(t, docs, userID)
 	cfg, err := settings.Get(context.Background(), userID)
 	if err != nil {
@@ -104,7 +109,7 @@ func TestChat_BotInactive(t *testing.T) {
 	}
 
 	em := &capturingEmitter{}
-	if err := chat.Chat(context.Background(), service.ChatInput{Message: "halo"}, em); err != nil {
+	if err := chat.Chat(context.Background(), service.ChatInput{Slug: slug, Message: "halo"}, em); err != nil {
 		t.Fatalf("chat: %v", err)
 	}
 	if em.inactive == "" {
@@ -119,11 +124,11 @@ func TestChat_BotInactive(t *testing.T) {
 }
 
 func TestChat_NoContext_DoesNotHallucinate(t *testing.T) {
-	chat, _, _, _ := newChatStack(t, &ai.StubLLM{})
+	chat, _, _, _, slug := newChatStack(t, &ai.StubLLM{})
 
 	em := &capturingEmitter{}
 	q := "Siapa presiden negara fiktif Atlantis tahun 2099?"
-	if err := chat.Chat(context.Background(), service.ChatInput{Message: q}, em); err != nil {
+	if err := chat.Chat(context.Background(), service.ChatInput{Slug: slug, Message: q}, em); err != nil {
 		t.Fatalf("chat: %v", err)
 	}
 	if len(em.sources) != 0 {
@@ -136,11 +141,11 @@ func TestChat_NoContext_DoesNotHallucinate(t *testing.T) {
 }
 
 func TestChat_RelevantSources(t *testing.T) {
-	chat, docs, _, userID := newChatStack(t, &ai.StubLLM{Reply: "Buka Settings lalu Security. [1]"})
+	chat, docs, _, userID, slug := newChatStack(t, &ai.StubLLM{Reply: "Buka Settings lalu Security. [1]"})
 	uploadReady(t, docs, userID)
 
 	em := &capturingEmitter{}
-	if err := chat.Chat(context.Background(), service.ChatInput{Message: "Gimana cara reset password?"}, em); err != nil {
+	if err := chat.Chat(context.Background(), service.ChatInput{Slug: slug, Message: "Gimana cara reset password?"}, em); err != nil {
 		t.Fatalf("chat: %v", err)
 	}
 	if len(em.sources) == 0 {
@@ -169,11 +174,11 @@ func (r *recordingLLM) ChatStream(ctx context.Context, req ai.ChatRequest, onTok
 
 func TestChat_FollowUpSendsHistory(t *testing.T) {
 	rec := &recordingLLM{StubLLM: ai.StubLLM{Reply: "Harga paket Starter Rp 99.000. [1]"}}
-	chat, docs, _, userID := newChatStack(t, rec)
+	chat, docs, _, userID, slug := newChatStack(t, rec)
 	uploadReady(t, docs, userID)
 
 	em1 := &capturingEmitter{}
-	if err := chat.Chat(context.Background(), service.ChatInput{Message: "Ada paket apa saja?"}, em1); err != nil {
+	if err := chat.Chat(context.Background(), service.ChatInput{Slug: slug, Message: "Ada paket apa saja?"}, em1); err != nil {
 		t.Fatalf("first: %v", err)
 	}
 	if em1.doneID == "" {
@@ -182,7 +187,7 @@ func TestChat_FollowUpSendsHistory(t *testing.T) {
 
 	em2 := &capturingEmitter{}
 	cid := em1.doneID
-	if err := chat.Chat(context.Background(), service.ChatInput{Message: "itu berapa harganya?", ConversationID: &cid}, em2); err != nil {
+	if err := chat.Chat(context.Background(), service.ChatInput{Slug: slug, Message: "itu berapa harganya?", ConversationID: &cid}, em2); err != nil {
 		t.Fatalf("follow-up: %v", err)
 	}
 	if len(rec.last.History) < 2 {
@@ -192,7 +197,7 @@ func TestChat_FollowUpSendsHistory(t *testing.T) {
 
 func TestChat_ZeroHit_DoesNotCallLLM(t *testing.T) {
 	rec := &recordingLLM{StubLLM: ai.StubLLM{Reply: "should not run"}}
-	chat, docs, settings, userID := newChatStack(t, rec)
+	chat, docs, settings, userID, slug := newChatStack(t, rec)
 	uploadReady(t, docs, userID)
 	cfg, err := settings.Get(context.Background(), userID)
 	if err != nil {
@@ -206,7 +211,7 @@ func TestChat_ZeroHit_DoesNotCallLLM(t *testing.T) {
 	}
 
 	em := &capturingEmitter{}
-	if err := chat.Chat(context.Background(), service.ChatInput{Message: "xyzzy-unrelated-foobar-999"}, em); err != nil {
+	if err := chat.Chat(context.Background(), service.ChatInput{Slug: slug, Message: "xyzzy-unrelated-foobar-999"}, em); err != nil {
 		t.Fatalf("chat: %v", err)
 	}
 	if rec.last.User != "" {
@@ -215,5 +220,83 @@ func TestChat_ZeroHit_DoesNotCallLLM(t *testing.T) {
 	got := strings.ToLower(em.tokens.String())
 	if !strings.Contains(got, "tidak") {
 		t.Fatalf("expected local unknown, got %q", em.tokens.String())
+	}
+}
+
+func TestChat_UnknownSlug_DoesNotCallLLM(t *testing.T) {
+	rec := &recordingLLM{StubLLM: ai.StubLLM{Reply: "should not run"}}
+	chat, _, _, _, _ := newChatStack(t, rec)
+	em := &capturingEmitter{}
+	err := chat.Chat(context.Background(), service.ChatInput{Slug: "tidak-ada", Message: "halo"}, em)
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("err = %v", err)
+	}
+	if rec.last.User != "" {
+		t.Fatal("LLM must not run for unknown slug")
+	}
+}
+
+func TestChat_DoesNotLeakOtherUserChunks(t *testing.T) {
+	dir := t.TempDir()
+	uploadDir := filepath.Join(dir, "uploads")
+	db, err := database.Open(filepath.Join(dir, "test.db"), uploadDir)
+	if err != nil {
+		t.Fatalf("db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	embedder := ai.NewStubEmbedder()
+	users := repository.NewUserRepo(db)
+	bots := repository.NewBotRepo(db)
+	auth := service.NewAuthServiceWithPolicy(users, "test-secret", "open", "")
+	a, err := auth.Register(context.Background(), "Alice", "a@example.com", "secret123")
+	if err != nil {
+		t.Fatalf("register a: %v", err)
+	}
+	b, err := auth.Register(context.Background(), "Bob", "b@example.com", "secret123")
+	if err != nil {
+		t.Fatalf("register b: %v", err)
+	}
+	botA, _ := bots.GetByUserID(context.Background(), a.ID)
+	botB, _ := bots.GetByUserID(context.Background(), b.ID)
+
+	docs := service.NewDocumentService(repository.NewDocumentRepo(db), repository.NewChunkRepo(db), embedder, uploadDir)
+	uploadReady(t, docs, a.ID)
+	raw := []byte("Jam buka toko adalah pukul delapan pagi.")
+	docB, err := docs.Upload(context.Background(), b.ID, "jam-buka.txt", int64(len(raw)), strings.NewReader(string(raw)))
+	if err != nil {
+		t.Fatalf("upload b: %v", err)
+	}
+	if err := docs.Process(context.Background(), docB.ID); err != nil {
+		t.Fatalf("process b: %v", err)
+	}
+
+	chat := service.NewChatService(
+		bots,
+		repository.NewDocumentRepo(db),
+		repository.NewChunkRepo(db),
+		repository.NewConversationRepo(db),
+		repository.NewMessageRepo(db),
+		repository.NewSettingsRepo(db),
+		embedder,
+		&ai.StubLLM{Reply: "ok [1]"},
+	)
+
+	emB := &capturingEmitter{}
+	if err := chat.Chat(context.Background(), service.ChatInput{Slug: botB.Slug, Message: "Gimana cara reset password?"}, emB); err != nil {
+		t.Fatalf("chat b: %v", err)
+	}
+	for _, src := range emB.sources {
+		if strings.Contains(strings.ToLower(src.Filename), "manual") {
+			t.Fatalf("bot B used A's document: %+v", emB.sources)
+		}
+	}
+
+	emA := &capturingEmitter{}
+	if err := chat.Chat(context.Background(), service.ChatInput{Slug: botA.Slug, Message: "Gimana cara reset password?"}, emA); err != nil {
+		t.Fatalf("chat a: %v", err)
+	}
+	if len(emA.sources) == 0 {
+		t.Fatal("bot A should retrieve from its own KB")
 	}
 }

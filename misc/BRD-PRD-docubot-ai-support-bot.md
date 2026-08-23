@@ -827,17 +827,20 @@ BOT_MIN_SCORE=0.3
 
 ## 17. Roadmap Lanjutan
 
-(Setelah MVP & portfolio selesai — **jangan dikerjakan sebelum itu**)
+**V2 (23 Agu 2026):** self-host + slug bot + landing + iframe — diimplementasi. Lihat [`PLAN-V2-docubot-selfhost-embed.md`](./PLAN-V2-docubot-selfhost-embed.md). Embed V2 adalah iframe ke `/b/:slug`, bukan widget `<script>` lintas origin.
+
+(Setelah V2 live dan ada permintaan nyata — **jangan dikerjakan sebagai sprint V2**)
 
 - P1: PDF support penuh + parsing lebih baik
-- P1: Embed widget `<script>` untuk website klien (iframe)
-- P2: Multi-tenant (banyak bot per akun) → siap jadi produk SaaS kecil
+- P1: N bot per akun (`bot_id` di documents & conversations)
+- P2: `frame-ancestors` / origin allowlist
 - P2: Feedback thumbs 👍/👎 per jawaban → data kualitas untuk fine-tune prompt
 - P2: Auto-training dari log Q&A yang berhasil
 - P3: Channel Telegram / WhatsApp (pakai API resmi — hindari library unofficial yang berisiko banned)
 - P3: Postgres + pgvector untuk scale besar
 - P3: Dark mode, i18n (EN/ID), custom branding (logo, warna)
 - P4: Monetisasi: jual sebagai setup fee + retainer (lihat rencana UMKM di market data)
+- P4: Hosted multi-tenant, npm widget
 
 ---
 

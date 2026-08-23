@@ -21,14 +21,9 @@ func NewSettingsHandler(settings *service.SettingsService) *SettingsHandler {
 	return &SettingsHandler{settings: settings}
 }
 
-// PublicBot handles GET /api/v1/bot.
-func (h *SettingsHandler) PublicBot(c *gin.Context) {
-	bot, err := h.settings.GetPublic(c.Request.Context())
-	if err != nil {
-		util.Error(c, http.StatusInternalServerError, "INTERNAL", "internal server error")
-		return
-	}
-	util.JSON(c, http.StatusOK, bot)
+// PublicBot is retired. Use GET /api/v1/bots/:slug.
+func (h *SettingsHandler) LegacyGone(c *gin.Context) {
+	util.Error(c, http.StatusBadRequest, "GONE", "gunakan GET /api/v1/bots/:slug")
 }
 
 // Get handles GET /api/v1/settings.
