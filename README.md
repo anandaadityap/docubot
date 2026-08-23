@@ -171,7 +171,7 @@ BASE_URL=http://127.0.0.1:8080 SLUG=nanda ./scripts/bench.sh
 
 The script prints wall time, **time-to-first-token** (`ttft_ms`), server `latency_ms`, token usage, and an estimated USD cost using DeepSeek-chat list prices (override `OUT_PER_M` / `-OutPerMillion`). Record a real DeepSeek run in this README after deploy.
 
-**Sample local run (StubLLM, 22 Agu 2026, Windows):** `total_wall_ms` is typically well under 1s because StubLLM does not call a network. With real DeepSeek + OpenAI embeddings, target **TTFT &lt; 2s** (NFR-01) after a document is `ready`.
+**Sample local run (StubLLM, 22 Agu 2026, Windows):** `total_wall_ms` is typically well under 1s because StubLLM does not call a network. With real DeepSeek chat + OpenRouter embeddings (`nvidia/nemotron-3-embed-1b:free`), target **TTFT &lt; 2s** (NFR-01) after a document is `ready`.
 
 ## Deploy (VPS)
 

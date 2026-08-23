@@ -96,6 +96,10 @@ func (e *OpenAIEmbedder) embedBatch(ctx context.Context, texts []string) ([][]fl
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+e.apiKey)
+	if strings.Contains(e.baseURL, "openrouter.ai") || strings.HasPrefix(e.apiKey, "sk-or-") {
+		req.Header.Set("HTTP-Referer", "https://chatbot.supernand.tech")
+		req.Header.Set("X-Title", "DocuBot")
+	}
 
 	resp, err := e.httpClient.Do(req)
 	if err != nil {
@@ -146,6 +150,8 @@ func (e *OpenAIEmbedder) VectorDims() int {
 		return 1536
 	case "text-embedding-3-large":
 		return 3072
+	case "nvidia/nemotron-3-embed-1b:free":
+		return 2048
 	default:
 		return 0
 	}

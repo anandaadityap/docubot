@@ -117,6 +117,26 @@ func TestOpenAIEmbedder_BatchAndAuth(t *testing.T) {
 	}
 }
 
+func TestOpenAIEmbedder_OpenRouterHeaders(t *testing.T) {
+	var referer, title string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		referer = r.Header.Get("HTTP-Referer")
+		title = r.Header.Get("X-Title")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{{"index": 0, "embedding": []float32{0.1, 0.2}}},
+		})
+	}))
+	defer srv.Close()
+
+	e := ai.NewOpenAIEmbedder("sk-or-v1-test", srv.URL, "nvidia/nemotron-3-embed-1b:free")
+	if _, err := e.Embed(context.Background(), []string{"hi"}); err != nil {
+		t.Fatalf("embed: %v", err)
+	}
+	if referer == "" || title == "" {
+		t.Fatalf("openrouter headers missing referer=%q title=%q", referer, title)
+	}
+}
+
 func TestOpenAIEmbedder_MissingKey(t *testing.T) {
 	e := ai.NewOpenAIEmbedder("", "http://example.com/v1", "m")
 	_, err := e.Embed(context.Background(), []string{"a"})

@@ -69,7 +69,10 @@ Aturan:
 - REGISTER_MODE=first-only kecuali owner minta lain.
 - CORS_ORIGINS harus berisi origin HTTPS publik (https://DOMAIN).
 - LLM: DeepSeek (LLM_BASE_URL + LLM_API_KEY + LLM_MODEL=deepseek-chat) sesuai .env.example.
-- Embed: tetap butuh EMBED_API_KEY (OpenAI-compatible). Tanpa itu server pakai stub — bench K3 tidak valid.
+- Embed: OpenAI-compatible `/embeddings`. Live memakai OpenRouter:
+  EMBED_BASE_URL=https://openrouter.ai/api/v1
+  EMBED_MODEL=nvidia/nemotron-3-embed-1b:free
+  EMBED_API_KEY dari owner (sk-or-..., jangan echo). Setelah ganti embed model/dim, POST /api/v1/documents/{id}/reprocess sampai ready. Tanpa key nyata server pakai stub 64-d — bench K3 tidak valid.
 - docker compose: frontend bind 127.0.0.1:3000. Nginx host reverse-proxy ke situ + SSL.
 - SSE: proxy_buffering off; proxy_read_timeout ≥ 75s.
 - JANGAN set X-Frame-Options DENY/SAMEORIGIN atau CSP frame-ancestors 'none' pada / atau /b/ (iframe harus jalan).
