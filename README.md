@@ -2,7 +2,7 @@
 
 Self-host AI support bot with a knowledge base (RAG). **Go (Gin) + React + SQLite + DeepSeek/OpenAI.**
 
-License: [MIT](./LICENSE). Intended public demo: `https://chatbot.supernand.tech` (Docker Compose + host nginx). **That URL is not claimed live yet** — until it is, use Quick start below.
+License: [MIT](./LICENSE). Live demo: **https://chatbot.supernand.tech** (Docker Compose + host nginx). Try it: open the landing page, click **Coba demo**, and ask a question from the sample FAQ.
 
 This is **not** a hosted SaaS, not multi-tenant, and not an npm chat widget.
 
