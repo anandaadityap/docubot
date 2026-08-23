@@ -8,6 +8,7 @@ Internal planning notes (mostly Indonesian). **Not** the public product pitch.
 | [`PLAN-V2-docubot-selfhost-embed.md`](./PLAN-V2-docubot-selfhost-embed.md) | Product decisions for slug, landing, iframe. |
 | [`BRD-PRD-docubot-ai-support-bot.md`](./BRD-PRD-docubot-ai-support-bot.md) | MVP RAG/API/schema. Ignore stale milestone tables and any personal income/Upwork bid notes. |
 | [`STATUS-GAPS-docubot-ai-support-bot.md`](./STATUS-GAPS-docubot-ai-support-bot.md) | MVP gaps already closed. |
+| [`PROMPT-HERMES-VPS-LIVE.md`](./PROMPT-HERMES-VPS-LIVE.md) | Prompt for a VPS agent: live deploy (K1) + DeepSeek bench (K3). |
 | [`example/embed-dummy.html`](./example/embed-dummy.html) | Local iframe smoke test (replace `SLUG`). |
 
 Public clone/run/embed instructions live in the root [`README.md`](../README.md).
